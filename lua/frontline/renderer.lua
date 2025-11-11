@@ -1,21 +1,36 @@
 local M = {}
 
--- Helper to parse ISO 8601 date format from Taskwarrior
+-- Helper to parse ISO 8601 date format from Taskwarrior and convert to local time
 local function parse_iso_date(iso_date)
   if not iso_date then
     return nil
   end
-  local year = string.sub(iso_date, 1, 4)
-  local month = string.sub(iso_date, 5, 6)
-  local day = string.sub(iso_date, 7, 8)
-  local hour = string.sub(iso_date, 10, 11)
-  local minute = string.sub(iso_date, 12, 13)
+  local year = tonumber(string.sub(iso_date, 1, 4))
+  local month = tonumber(string.sub(iso_date, 5, 6))
+  local day = tonumber(string.sub(iso_date, 7, 8))
+  local hour = tonumber(string.sub(iso_date, 10, 11))
+  local minute = tonumber(string.sub(iso_date, 12, 13))
+  local second = tonumber(string.sub(iso_date, 14, 15))
 
-  -- Omit time if it's 00:00 (midnight)
-  if hour == "00" and minute == "00" then
-    return string.format("%s-%s-%s", year, month, day)
+  -- Convert UTC timestamp to epoch time
+  local utc_time = os.time({
+    year = year,
+    month = month,
+    day = day,
+    hour = hour,
+    min = minute,
+    sec = second,
+    isdst = false
+  })
+
+  -- Convert to local time
+  local local_time = os.date("*t", utc_time)
+
+  -- Omit time if it's 00:00 (midnight) in local time
+  if local_time.hour == 0 and local_time.min == 0 then
+    return string.format("%04d-%02d-%02d", local_time.year, local_time.month, local_time.day)
   else
-    return string.format("%s-%s-%s %s:%s", year, month, day, hour, minute)
+    return string.format("%04d-%02d-%02d %02d:%02d", local_time.year, local_time.month, local_time.day, local_time.hour, local_time.min)
   end
 end
 

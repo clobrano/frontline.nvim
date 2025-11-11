@@ -1,6 +1,34 @@
 
 local renderer = require("frontline.renderer")
 
+-- Helper to convert UTC ISO date to expected local time string
+local function utc_to_local_string(iso_date)
+  local year = tonumber(string.sub(iso_date, 1, 4))
+  local month = tonumber(string.sub(iso_date, 5, 6))
+  local day = tonumber(string.sub(iso_date, 7, 8))
+  local hour = tonumber(string.sub(iso_date, 10, 11))
+  local minute = tonumber(string.sub(iso_date, 12, 13))
+  local second = tonumber(string.sub(iso_date, 14, 15))
+
+  local utc_time = os.time({
+    year = year,
+    month = month,
+    day = day,
+    hour = hour,
+    min = minute,
+    sec = second,
+    isdst = false
+  })
+
+  local local_time = os.date("*t", utc_time)
+
+  if local_time.hour == 0 and local_time.min == 0 then
+    return string.format("%04d-%02d-%02d", local_time.year, local_time.month, local_time.day)
+  else
+    return string.format("%04d-%02d-%02d %02d:%02d", local_time.year, local_time.month, local_time.day, local_time.hour, local_time.min)
+  end
+end
+
 describe("Renderer Module", function()
   it("should format a pending task correctly", function()
     local task = {
@@ -44,7 +72,7 @@ describe("Renderer Module", function()
           due = "20251225T103000Z",
           uuid = "abcabcabcabcabca",
         }
-        local expected = "* [ ] Task with Due Date [2025-12-25 10:30] (abcabcab)"
+        local expected = "* [ ] Task with Due Date [" .. utc_to_local_string("20251225T103000Z") .. "] (abcabcab)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -56,7 +84,7 @@ describe("Renderer Module", function()
           scheduled = "20251220T090000Z",
           uuid = "schedschedsched1",
         }
-        local expected = "* [ ] Task with Scheduled Date (2025-12-20 09:00) (schedsch)"
+        local expected = "* [ ] Task with Scheduled Date (" .. utc_to_local_string("20251220T090000Z") .. ") (schedsch)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -69,7 +97,7 @@ describe("Renderer Module", function()
           due = "20251225T103000Z",
           uuid = "bothbothbothbot1",
         }
-        local expected = "* [ ] Task with Both Dates (2025-12-20 09:00) [2025-12-25 10:30] (bothboth)"
+        local expected = "* [ ] Task with Both Dates (" .. utc_to_local_string("20251220T090000Z") .. ") [" .. utc_to_local_string("20251225T103000Z") .. "] (bothboth)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -81,7 +109,7 @@ describe("Renderer Module", function()
           due = "20251225T000000Z",
           uuid = "midnight00000001",
         }
-        local expected = "* [ ] Task with Due Date at Midnight [2025-12-25] (midnight)"
+        local expected = "* [ ] Task with Due Date at Midnight [" .. utc_to_local_string("20251225T000000Z") .. "] (midnight)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -93,7 +121,7 @@ describe("Renderer Module", function()
           scheduled = "20251220T000000Z",
           uuid = "schedmidnight001",
         }
-        local expected = "* [ ] Task with Scheduled at Midnight (2025-12-20) (schedmid)"
+        local expected = "* [ ] Task with Scheduled at Midnight (" .. utc_to_local_string("20251220T000000Z") .. ") (schedmid)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -106,7 +134,7 @@ describe("Renderer Module", function()
           due = "20251225T000000Z",
           uuid = "bothmidnight0001",
         }
-        local expected = "* [ ] Both Dates at Midnight (2025-12-20) [2025-12-25] (bothmidn)"
+        local expected = "* [ ] Both Dates at Midnight (" .. utc_to_local_string("20251220T000000Z") .. ") [" .. utc_to_local_string("20251225T000000Z") .. "] (bothmidn)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -181,7 +209,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "9999aaaabbbbcccc",
         }
-        local expected = "* [ ] All Icons Task [2025-11-11 09:00] [!!,🔒,A] (9999aaaa)"
+        local expected = "* [ ] All Icons Task [" .. utc_to_local_string("20251111T090000Z") .. "] [!!,🔒,A] (9999aaaa)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -197,7 +225,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "completecomplete",
         }
-        local expected = "* [ ] Complete Task (2025-11-10 08:00) [2025-11-11 09:00] [!!!,🔒,A] (complete)"
+        local expected = "* [ ] Complete Task (" .. utc_to_local_string("20251110T080000Z") .. ") [" .. utc_to_local_string("20251111T090000Z") .. "] [!!!,🔒,A] (complete)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
