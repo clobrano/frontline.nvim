@@ -10,7 +10,13 @@ local function parse_iso_date(iso_date)
   local day = string.sub(iso_date, 7, 8)
   local hour = string.sub(iso_date, 10, 11)
   local minute = string.sub(iso_date, 12, 13)
-  return string.format("%s-%s-%s %s:%s", year, month, day, hour, minute)
+
+  -- Omit time if it's 00:00 (midnight)
+  if hour == "00" and minute == "00" then
+    return string.format("%s-%s-%s", year, month, day)
+  else
+    return string.format("%s-%s-%s %s:%s", year, month, day, hour, minute)
+  end
 end
 
 -- Helper to format scheduled date (rounded parenthesis)

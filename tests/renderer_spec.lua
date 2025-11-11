@@ -72,6 +72,43 @@ describe("Renderer Module", function()
         local expected = "* [ ] Task with Both Dates (2025-12-20 09:00) [2025-12-25 10:30] (bothboth)"
         assert.are.same(expected, renderer.format_task(task))
       end)
+
+      it("should omit time for due date at midnight (00:00)", function()
+        local task = {
+          id = 43,
+          description = "Task with Due Date at Midnight",
+          status = "pending",
+          due = "20251225T000000Z",
+          uuid = "midnight00000001",
+        }
+        local expected = "* [ ] Task with Due Date at Midnight [2025-12-25] (midnight)"
+        assert.are.same(expected, renderer.format_task(task))
+      end)
+
+      it("should omit time for scheduled date at midnight (00:00)", function()
+        local task = {
+          id = 44,
+          description = "Task with Scheduled at Midnight",
+          status = "pending",
+          scheduled = "20251220T000000Z",
+          uuid = "schedmidnight001",
+        }
+        local expected = "* [ ] Task with Scheduled at Midnight (2025-12-20) (schedmid)"
+        assert.are.same(expected, renderer.format_task(task))
+      end)
+
+      it("should omit time for both dates at midnight", function()
+        local task = {
+          id = 45,
+          description = "Both Dates at Midnight",
+          status = "pending",
+          scheduled = "20251220T000000Z",
+          due = "20251225T000000Z",
+          uuid = "bothmidnight0001",
+        }
+        local expected = "* [ ] Both Dates at Midnight (2025-12-20) [2025-12-25] (bothmidn)"
+        assert.are.same(expected, renderer.format_task(task))
+      end)
     
       it("should include high priority icon (!!!)", function()
         local task = {
