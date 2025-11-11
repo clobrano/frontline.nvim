@@ -13,6 +13,7 @@ local config = {
     toggle_started = "<leader>ts",
     modify_task = "<leader>tm",
     add_annotation = "<leader>ta",
+    edit_task = "<leader>te",
   },
 }
 
@@ -145,6 +146,12 @@ function M.setup(opts)
       if config.mappings.add_annotation then
         vim.keymap.set("n", config.mappings.add_annotation, mappings.add_annotation,
           vim.tbl_extend("force", opts_mapping, { desc = "Add task annotation" }))
+      end
+
+      -- Edit task
+      if config.mappings.edit_task then
+        vim.keymap.set("n", config.mappings.edit_task, mappings.edit_task,
+          vim.tbl_extend("force", opts_mapping, { desc = "Edit task in Taskwarrior editor" }))
       end
     end,
     group = vim.api.nvim_create_augroup("FrontlineMappings", { clear = true }),

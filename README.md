@@ -99,6 +99,7 @@ Place your cursor on any task line and use these default keybindings:
 | `<leader>ts` | Toggle Started | Start or stop working on task |
 | `<leader>tm` | Modify Task | Modify task properties (prompts for input) |
 | `<leader>ta` | Add Annotation | Add a note to the task |
+| `<leader>te` | Edit Task | Open task in Taskwarrior's interactive editor |
 
 **Examples:**
 
@@ -111,6 +112,9 @@ Place your cursor on any task line and use these default keybindings:
 
 " Press <leader>tm and enter: priority:H due:tomorrow
 " Press <leader>ta and enter: "Started working on this"
+
+" Press <leader>te to open the full Taskwarrior editor in a split
+" Edit all task properties, save and close to update
 ```
 
 After any modification, the task list automatically refreshes to show the updated state.
@@ -125,6 +129,7 @@ require('frontline').setup({
     toggle_started = "<leader>ts",   -- Toggle task started/unstarted
     modify_task = "<leader>tm",      -- Modify task properties
     add_annotation = "<leader>ta",   -- Add task annotation
+    edit_task = "<leader>te",        -- Edit task in Taskwarrior editor
   },
 })
 ```
@@ -138,6 +143,7 @@ require('frontline').setup({
 | `mappings.toggle_started` | string | `"<leader>ts"` | Keybinding to toggle task started/unstarted |
 | `mappings.modify_task` | string | `"<leader>tm"` | Keybinding to modify task |
 | `mappings.add_annotation` | string | `"<leader>ta"` | Keybinding to add annotation |
+| `mappings.edit_task` | string | `"<leader>te"` | Keybinding to edit task in Taskwarrior editor |
 
 **Note:** Set any mapping to `false` to disable it:
 

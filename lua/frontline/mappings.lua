@@ -161,4 +161,47 @@ function M.add_annotation()
   end)
 end
 
+-- Edit task in Taskwarrior's interactive editor
+function M.edit_task()
+  local hash = M.get_task_hash_under_cursor()
+  if not hash then
+    return
+  end
+
+  -- Save current Neovim state
+  vim.cmd("write")
+
+  -- Open task edit in a terminal buffer
+  vim.notify("Opening task editor...", vim.log.levels.INFO)
+
+  -- Create a new terminal buffer for task edit
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_option(bufnr, "bufhidden", "wipe")
+
+  -- Open in a split
+  vim.cmd("split")
+  vim.api.nvim_win_set_buf(0, bufnr)
+
+  -- Start terminal with task edit command
+  local term_job = vim.fn.termopen(string.format("task %s edit", hash), {
+    on_exit = function(_, exit_code, _)
+      if exit_code == 0 then
+        vim.notify("Task updated", vim.log.levels.INFO)
+        -- Close the terminal window
+        vim.cmd("close")
+        -- Refresh the buffer
+        vim.schedule(function()
+          require("frontline").refresh_current_buffer()
+        end)
+      else
+        vim.notify("Task edit cancelled or failed", vim.log.levels.WARN)
+        vim.cmd("close")
+      end
+    end
+  })
+
+  -- Enter insert mode in the terminal
+  vim.cmd("startinsert")
+end
+
 return M
