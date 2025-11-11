@@ -9,7 +9,7 @@ describe("Renderer Module", function()
       status = "pending",
       uuid = "abcdef1234567890",
     }
-        local expected = "* [ ] Test Pending Task () (abcdef12)"
+        local expected = "* [ ] Test Pending Task (abcdef12)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -21,7 +21,7 @@ describe("Renderer Module", function()
           start = "20251110T100000Z",
           uuid = "fedcba9876543210",
         }
-        local expected = "* [S] Test Started Task () (fedcba98)"
+        local expected = "* [S] Test Started Task (fedcba98)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -32,7 +32,7 @@ describe("Renderer Module", function()
           status = "completed",
           uuid = "1234567890abcdef",
         }
-        local expected = "* [x] Test Completed Task () (12345678)"
+        local expected = "* [x] Test Completed Task (12345678)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -56,7 +56,7 @@ describe("Renderer Module", function()
           priority = "H",
           uuid = "defdefdefdefdefd",
         }
-        local expected = "* [ ] High Priority Task () [H] (defdefde)"
+        local expected = "* [ ] High Priority Task [H] (defdefde)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -68,7 +68,7 @@ describe("Renderer Module", function()
           depends = {"some-uuid"},
           uuid = "1111222233334444",
         }
-        local expected = "* [ ] Dependent Task () [🔒] (11112222)"
+        local expected = "* [ ] Dependent Task [🔒] (11112222)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -80,7 +80,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Some note"}},
           uuid = "5555666677778888",
         }
-        local expected = "* [ ] Annotated Task () [A] (55556666)"
+        local expected = "* [ ] Annotated Task [A] (55556666)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -106,7 +106,7 @@ describe("Renderer Module", function()
           status = "pending",
           uuid = "dddeeefff0001111",
         }
-        local expected = "* [ ] Simple Task () (dddeeeff)"
+        local expected = "* [ ] Simple Task (dddeeeff)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -117,7 +117,7 @@ describe("Renderer Module", function()
           status = "pending",
           uuid = "2222333344445555",
         }
-        local expected = "* [ ]  () (22223333)"
+        local expected = "* [ ]  (22223333)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     

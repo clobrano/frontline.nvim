@@ -13,7 +13,7 @@ local function format_due_date(task)
     local minute = string.sub(task.due, 12, 13)
     return string.format("(%s-%s-%s %s:%s)", year, month, day, hour, minute)
   end
-  return "()" -- Return empty parentheses if no due date
+  return "" -- Return empty string if no due date
 end
 
 -- Helper to get status indicator
@@ -56,8 +56,14 @@ function M.format_task(task)
   local extra_icons_str = get_extra_icons(task)
   local short_hash = string.sub(task.uuid or "", 1, 8)
 
-  local parts = {"*", status, description, due_date_str}
+  local parts = {"*", status, description}
 
+  -- Only add due date if it exists
+  if due_date_str ~= "" then
+    table.insert(parts, due_date_str)
+  end
+
+  -- Only add icons if they exist
   if extra_icons_str ~= "" then
     table.insert(parts, extra_icons_str)
   end
