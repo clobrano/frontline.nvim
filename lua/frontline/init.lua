@@ -4,6 +4,11 @@ local parser = require("frontline.parser")
 local task_client = require("frontline.task_client")
 local renderer = require("frontline.renderer")
 
+-- Default configuration
+local config = {
+  newlines_after_tasks = 2,
+}
+
 -- Function to refresh tasks in the current buffer
 local function refresh_tasks()
   local bufnr = vim.api.nvim_get_current_buf()
@@ -13,12 +18,29 @@ local function refresh_tasks()
     return
   end
 
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local queries = parser.extract_queries(lines)
+  -- Process queries one at a time, re-parsing after each update
+  -- to keep line numbers accurate
+  local processed_queries = {}
 
-  for _, query_info in ipairs(queries) do
-    -- Re-read lines after each update to get fresh line numbers
-    lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  while true do
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local queries = parser.extract_queries(lines)
+
+    -- Find the first query we haven't processed yet
+    local query_info = nil
+    for _, q in ipairs(queries) do
+      local query_key = q.line_num .. ":" .. q.query
+      if not processed_queries[query_key] then
+        query_info = q
+        processed_queries[query_key] = true
+        break
+      end
+    end
+
+    -- If no unprocessed queries, we're done
+    if not query_info then
+      break
+    end
 
     local tasks, err = task_client.execute_query(query_info.query)
     if err then
@@ -30,6 +52,11 @@ local function refresh_tasks()
     local formatted_tasks = {}
     for _, task in ipairs(tasks) do
       table.insert(formatted_tasks, renderer.format_task(task))
+    end
+
+    -- Add configured number of newlines after tasks
+    for i = 1, config.newlines_after_tasks do
+      table.insert(formatted_tasks, "")
     end
 
     local header_line_idx = query_info.line_num - 1 -- 0-indexed header line
@@ -48,6 +75,9 @@ local function refresh_tasks()
       end_replace_idx = end_replace_idx + 1
     end
 
+    -- Get fresh lines before making changes
+    lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
     -- nvim_buf_set_lines expects start_row (inclusive) and end_row (exclusive)
     vim.api.nvim_buf_set_lines(bufnr, start_replace_idx, end_replace_idx, false, formatted_tasks)
   end
@@ -55,7 +85,9 @@ end
 
 function M.setup(opts)
   opts = opts or {}
-  -- Plugin configuration will go here
+
+  -- Merge user config with defaults
+  config = vim.tbl_deep_extend("force", config, opts)
 
   -- Autocommands for refreshing task lists
   vim.api.nvim_create_autocmd({"BufReadPost", "BufWritePost"}, {
