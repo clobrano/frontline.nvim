@@ -17,6 +17,7 @@ end
 local original_nvim_buf_get_lines
 local original_nvim_buf_get_option
 local original_nvim_buf_set_lines
+local original_nvim_get_current_buf
 local original_nvim_create_autocmd
 local original_nvim_create_user_command
 
@@ -45,10 +46,14 @@ function M.setup_mocks()
   original_nvim_buf_get_lines = vim.api.nvim_buf_get_lines
   original_nvim_buf_get_option = vim.api.nvim_buf_get_option
   original_nvim_buf_set_lines = vim.api.nvim_buf_set_lines
+  original_nvim_get_current_buf = vim.api.nvim_get_current_buf
   original_nvim_create_autocmd = vim.api.nvim_create_autocmd
   original_nvim_create_user_command = vim.api.nvim_create_user_command
 
   -- Apply mocks
+  vim.api.nvim_get_current_buf = function()
+    return 0 -- Always return buffer 0 (current buffer) in tests
+  end
   vim.api.nvim_buf_get_lines = function(bufnr, start_line, end_line, strict_indexing)
     if bufnr == 0 then -- Current buffer
       return M.mock_buffer_content
@@ -109,6 +114,7 @@ function M.restore_mocks()
   if original_nvim_buf_get_lines then vim.api.nvim_buf_get_lines = original_nvim_buf_get_lines end
   if original_nvim_buf_get_option then vim.api.nvim_buf_get_option = original_nvim_buf_get_option end
   if original_nvim_buf_set_lines then vim.api.nvim_buf_set_lines = original_nvim_buf_set_lines end
+  if original_nvim_get_current_buf then vim.api.nvim_get_current_buf = original_nvim_get_current_buf end
   if original_nvim_create_autocmd then vim.api.nvim_create_autocmd = original_nvim_create_autocmd end
   if original_nvim_create_user_command then vim.api.nvim_create_user_command = original_nvim_create_user_command end
 

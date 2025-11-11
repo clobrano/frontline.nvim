@@ -33,6 +33,8 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
     local initial_content = {
       "# My Tasks | status:pending",
       "Existing content below header",
+      "## Other Section",
+      "Some other content",
     }
     test_utils.set_mock_buffer_content(initial_content)
 
@@ -47,7 +49,8 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
     local expected_content = {
       "# My Tasks | status:pending",
       "* [ ] New Task 1 () (aaaa1111)",
-      "Existing content below header",
+      "## Other Section",
+      "Some other content",
     }
     assert.are.same(expected_content, test_utils.mock_buffer_content)
   end)
@@ -56,6 +59,7 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
     local initial_content = {
       "# My Tasks | status:pending",
       "* [ ] Old Task 1 () (cccc3333)",
+      "## Other Section",
       "Existing content below header",
     }
     test_utils.set_mock_buffer_content(initial_content)
@@ -71,6 +75,7 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
     local expected_content = {
       "# My Tasks | status:pending",
       "* [ ] Updated Task 2 () (dddd4444)",
+      "## Other Section",
       "Existing content below header",
     }
     assert.are.same(expected_content, test_utils.mock_buffer_content)
@@ -80,6 +85,8 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
     local initial_content = {
       "# My Tasks | status:waiting",
       "Some text",
+      "## Another Section",
+      "More content",
     }
     test_utils.set_mock_buffer_content(initial_content)
 
@@ -94,7 +101,8 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
     local expected_content = {
       "# My Tasks | status:waiting",
       "* [ ] Waiting Task () (ffff6666)",
-      "Some text",
+      "## Another Section",
+      "More content",
     }
     assert.are.same(expected_content, test_utils.mock_buffer_content)
   end)

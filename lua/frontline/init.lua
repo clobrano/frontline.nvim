@@ -17,6 +17,9 @@ local function refresh_tasks()
   local queries = parser.extract_queries(lines)
 
   for _, query_info in ipairs(queries) do
+    -- Re-read lines after each update to get fresh line numbers
+    lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
     local tasks, err = task_client.execute_query(query_info.query)
     if err then
       -- TODO: Display error message at the bottom of the Neovim buffer (Task 7.1)
@@ -29,26 +32,20 @@ local function refresh_tasks()
       table.insert(formatted_tasks, renderer.format_task(task))
     end
 
-    -- Find the end of the current task list section
-    local start_line = query_info.line_num
-    local end_line = start_line
-    while end_line < #lines and (string.match(lines[end_line + 1], "^%* ") or string.match(lines[end_line + 1], "^%s*$")) do
-      end_line = end_line + 1
-    end
-
     local header_line_idx = query_info.line_num - 1 -- 0-indexed header line
     local start_replace_idx = header_line_idx + 1 -- 0-indexed, line immediately after header
 
     local end_replace_idx = start_replace_idx
-    -- Find the end of the existing task list (if any) or empty lines below the header
-    -- The loop should continue as long as we are within bounds and the line matches a task or is empty.
+    -- Find the end of the section - either the next header or end of file
+    -- We replace everything in the section (task lines, empty lines, and other content)
     while end_replace_idx < #lines do
       local current_line_content = lines[end_replace_idx + 1] -- Lua tables are 1-indexed
-      if string.match(current_line_content, "^%* ") or string.match(current_line_content, "^%s*$") then
-        end_replace_idx = end_replace_idx + 1
-      else
-        break -- Stop if the line is not a task or empty
+      -- Stop if we encounter another markdown header (but only if it's truly a header with #)
+      if string.match(current_line_content, "^#+ ") then
+        break
       end
+      -- Otherwise, include this line in the replacement range
+      end_replace_idx = end_replace_idx + 1
     end
 
     -- nvim_buf_set_lines expects start_row (inclusive) and end_row (exclusive)
