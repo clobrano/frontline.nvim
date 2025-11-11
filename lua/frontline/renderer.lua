@@ -1,19 +1,32 @@
 local M = {}
 
--- Helper to format due date
+-- Helper to parse ISO 8601 date format from Taskwarrior
+local function parse_iso_date(iso_date)
+  if not iso_date then
+    return nil
+  end
+  local year = string.sub(iso_date, 1, 4)
+  local month = string.sub(iso_date, 5, 6)
+  local day = string.sub(iso_date, 7, 8)
+  local hour = string.sub(iso_date, 10, 11)
+  local minute = string.sub(iso_date, 12, 13)
+  return string.format("%s-%s-%s %s:%s", year, month, day, hour, minute)
+end
+
+-- Helper to format scheduled date (rounded parenthesis)
+local function format_scheduled_date(task)
+  if task.scheduled then
+    return string.format("(%s)", parse_iso_date(task.scheduled))
+  end
+  return ""
+end
+
+-- Helper to format due date (squared brackets)
 local function format_due_date(task)
   if task.due then
-    -- Taskwarrior 'export' provides due date in ISO 8601 format (e.g., "20251114T170000Z")
-    -- We need to parse and reformat it.
-    -- A simple approach for now: extract date and time parts.
-    local year = string.sub(task.due, 1, 4)
-    local month = string.sub(task.due, 5, 6)
-    local day = string.sub(task.due, 7, 8)
-    local hour = string.sub(task.due, 10, 11)
-    local minute = string.sub(task.due, 12, 13)
-    return string.format("(%s-%s-%s %s:%s)", year, month, day, hour, minute)
+    return string.format("[%s]", parse_iso_date(task.due))
   end
-  return "" -- Return empty string if no due date
+  return ""
 end
 
 -- Helper to get status indicator
@@ -61,13 +74,19 @@ end
 function M.format_task(task)
   local status = get_status_indicator(task)
   local description = task.description or ""
+  local scheduled_str = format_scheduled_date(task)
   local due_date_str = format_due_date(task)
   local extra_icons_str = get_extra_icons(task)
   local short_hash = string.sub(task.uuid or "", 1, 8)
 
   local parts = {"*", status, description}
 
-  -- Only add due date if it exists
+  -- Add scheduled date first (rounded parenthesis)
+  if scheduled_str ~= "" then
+    table.insert(parts, scheduled_str)
+  end
+
+  -- Add due date (squared brackets)
   if due_date_str ~= "" then
     table.insert(parts, due_date_str)
   end

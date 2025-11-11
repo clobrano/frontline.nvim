@@ -36,7 +36,7 @@ describe("Renderer Module", function()
         assert.are.same(expected, renderer.format_task(task))
       end)
     
-      it("should include due date if present", function()
+      it("should include due date if present (squared brackets)", function()
         local task = {
           id = 4,
           description = "Task with Due Date",
@@ -44,7 +44,32 @@ describe("Renderer Module", function()
           due = "20251225T103000Z",
           uuid = "abcabcabcabcabca",
         }
-        local expected = "* [ ] Task with Due Date (2025-12-25 10:30) (abcabcab)"
+        local expected = "* [ ] Task with Due Date [2025-12-25 10:30] (abcabcab)"
+        assert.are.same(expected, renderer.format_task(task))
+      end)
+
+      it("should include scheduled date if present (rounded parenthesis)", function()
+        local task = {
+          id = 41,
+          description = "Task with Scheduled Date",
+          status = "pending",
+          scheduled = "20251220T090000Z",
+          uuid = "schedschedsched1",
+        }
+        local expected = "* [ ] Task with Scheduled Date (2025-12-20 09:00) (schedsch)"
+        assert.are.same(expected, renderer.format_task(task))
+      end)
+
+      it("should include both scheduled and due dates", function()
+        local task = {
+          id = 42,
+          description = "Task with Both Dates",
+          status = "pending",
+          scheduled = "20251220T090000Z",
+          due = "20251225T103000Z",
+          uuid = "bothbothbothbot1",
+        }
+        local expected = "* [ ] Task with Both Dates (2025-12-20 09:00) [2025-12-25 10:30] (bothboth)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -119,7 +144,23 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "9999aaaabbbbcccc",
         }
-        local expected = "* [ ] All Icons Task (2025-11-11 09:00) [!!,🔒,A] (9999aaaa)"
+        local expected = "* [ ] All Icons Task [2025-11-11 09:00] [!!,🔒,A] (9999aaaa)"
+        assert.are.same(expected, renderer.format_task(task))
+      end)
+
+      it("should combine scheduled, due, and icons", function()
+        local task = {
+          id = 81,
+          description = "Complete Task",
+          status = "pending",
+          scheduled = "20251110T080000Z",
+          due = "20251111T090000Z",
+          priority = "H",
+          depends = {"dep-uuid"},
+          annotations = {{description = "Another note"}},
+          uuid = "completecomplete",
+        }
+        local expected = "* [ ] Complete Task (2025-11-10 08:00) [2025-11-11 09:00] [!!!,🔒,A] (complete)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
