@@ -9,6 +9,8 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 - ✅ Task status indicators: `[ ]` pending, `[S]` started, `[x]` completed
 - 🎯 Priority, dependency, and annotation icons
 - ⚙️ Configurable blank lines after task lists
+- ⌨️ Interactive task management with keybindings
+- 🕐 Local timezone display for dates and times
 
 ## Installation
 
@@ -87,11 +89,43 @@ Use the command to manually trigger a refresh:
 :FrontlineRefresh
 ```
 
+### Interactive Task Management
+
+Place your cursor on any task line and use these default keybindings:
+
+| Keybinding | Action | Description |
+|------------|--------|-------------|
+| `<leader>td` | Toggle Done | Mark task as complete or reopen it |
+| `<leader>ts` | Toggle Started | Start or stop working on task |
+| `<leader>tm` | Modify Task | Modify task properties (prompts for input) |
+| `<leader>ta` | Add Annotation | Add a note to the task |
+
+**Examples:**
+
+```vim
+" On a task line, press <leader>td to mark it done
+" Press <leader>td again to reopen it
+
+" Press <leader>ts to start working on a task
+" Press <leader>ts again to stop
+
+" Press <leader>tm and enter: priority:H due:tomorrow
+" Press <leader>ta and enter: "Started working on this"
+```
+
+After any modification, the task list automatically refreshes to show the updated state.
+
 ## Configuration
 
 ```lua
 require('frontline').setup({
   newlines_after_tasks = 2,  -- Number of blank lines after task lists (default: 2)
+  mappings = {
+    toggle_done = "<leader>td",      -- Toggle task done/undone
+    toggle_started = "<leader>ts",   -- Toggle task started/unstarted
+    modify_task = "<leader>tm",      -- Modify task properties
+    add_annotation = "<leader>ta",   -- Add task annotation
+  },
 })
 ```
 
@@ -100,6 +134,23 @@ require('frontline').setup({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `newlines_after_tasks` | number | 2 | Number of blank lines to add after each task list |
+| `mappings.toggle_done` | string | `"<leader>td"` | Keybinding to toggle task done/undone |
+| `mappings.toggle_started` | string | `"<leader>ts"` | Keybinding to toggle task started/unstarted |
+| `mappings.modify_task` | string | `"<leader>tm"` | Keybinding to modify task |
+| `mappings.add_annotation` | string | `"<leader>ta"` | Keybinding to add annotation |
+
+**Note:** Set any mapping to `false` to disable it:
+
+```lua
+require('frontline').setup({
+  mappings = {
+    toggle_done = "<leader>td",
+    toggle_started = false,  -- Disable this mapping
+    modify_task = "<leader>tm",
+    add_annotation = "<leader>ta",
+  },
+})
+```
 
 ## Requirements
 
@@ -140,11 +191,11 @@ This plugin aims for compatibility with [Taskwiki](https://github.com/tools-life
 nvim --headless -c "PlenaryBustedDirectory tests/"
 ```
 
-All tests should pass (22/22):
+All tests should pass (30/30):
 - Integration tests: 5
 - Parser tests: 3
 - Task Client tests: 4
-- Renderer tests: 10
+- Renderer tests: 18
 
 ## License
 

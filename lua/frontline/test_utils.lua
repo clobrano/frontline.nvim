@@ -98,7 +98,9 @@ function M.setup_mocks()
   end
 
   vim.api.nvim_create_autocmd = function(events, opts)
-    for _, event in ipairs(events) do
+    -- Handle both string and table for events parameter
+    local event_list = type(events) == "table" and events or {events}
+    for _, event in ipairs(event_list) do
       autocmd_callbacks[event] = autocmd_callbacks[event] or {}
       table.insert(autocmd_callbacks[event], opts)
     end

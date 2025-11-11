@@ -3,10 +3,17 @@ local M = {}
 local parser = require("frontline.parser")
 local task_client = require("frontline.task_client")
 local renderer = require("frontline.renderer")
+local mappings = require("frontline.mappings")
 
 -- Default configuration
 local config = {
   newlines_after_tasks = 2,
+  mappings = {
+    toggle_done = "<leader>td",
+    toggle_started = "<leader>ts",
+    modify_task = "<leader>tm",
+    add_annotation = "<leader>ta",
+  },
 }
 
 -- Function to refresh tasks in the current buffer
@@ -83,6 +90,11 @@ local function refresh_tasks()
   end
 end
 
+-- Expose refresh function for mappings to use
+function M.refresh_current_buffer()
+  refresh_tasks()
+end
+
 function M.setup(opts)
   opts = opts or {}
 
@@ -102,6 +114,40 @@ function M.setup(opts)
     print("Frontline: Manual refresh triggered for " .. vim.fn.bufname())
   end, {
     desc = "Manually refresh Frontline tasks in the current buffer",
+  })
+
+  -- Setup keybindings for task interactions (only in markdown files)
+  vim.api.nvim_create_autocmd("FileType", {
+    pattern = "markdown",
+    callback = function(args)
+      local bufnr = args.buf
+      local opts_mapping = { noremap = true, silent = true, buffer = bufnr }
+
+      -- Toggle task done/undone
+      if config.mappings.toggle_done then
+        vim.keymap.set("n", config.mappings.toggle_done, mappings.toggle_done,
+          vim.tbl_extend("force", opts_mapping, { desc = "Toggle task done/undone" }))
+      end
+
+      -- Toggle task started/unstarted
+      if config.mappings.toggle_started then
+        vim.keymap.set("n", config.mappings.toggle_started, mappings.toggle_started,
+          vim.tbl_extend("force", opts_mapping, { desc = "Toggle task started/unstarted" }))
+      end
+
+      -- Modify task
+      if config.mappings.modify_task then
+        vim.keymap.set("n", config.mappings.modify_task, mappings.modify_task,
+          vim.tbl_extend("force", opts_mapping, { desc = "Modify task" }))
+      end
+
+      -- Add annotation
+      if config.mappings.add_annotation then
+        vim.keymap.set("n", config.mappings.add_annotation, mappings.add_annotation,
+          vim.tbl_extend("force", opts_mapping, { desc = "Add task annotation" }))
+      end
+    end,
+    group = vim.api.nvim_create_augroup("FrontlineMappings", { clear = true }),
   })
 end
 
