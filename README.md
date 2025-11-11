@@ -60,14 +60,14 @@ Tasks are displayed as Markdown list items:
 
 Example:
 ```markdown
-* [ ] Fix authentication bug (2025-11-15 10:00) [H,🔒] (abcd1234)
+* [ ] Fix authentication bug (2025-11-15 10:00) [!!!,🔒] (abcd1234)
 ```
 
 Where:
 - `[status]`: `[ ]` pending, `[S]` started, `[x]` completed
 - `description`: Task description from Taskwarrior
 - `(due_date)`: Due date and time (if set)
-- `[icons]`: Priority (H/M/L), Dependencies (🔒), Annotations (A)
+- `[icons]`: Priority (`!!!` high, `!!` medium, `!` low), Dependencies (🔒), Annotations (A)
 - `(hash)`: Short task UUID (first 8 characters)
 
 ### Automatic Refresh

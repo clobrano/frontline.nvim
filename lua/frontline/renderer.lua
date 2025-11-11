@@ -30,9 +30,18 @@ end
 -- Helper to get priority, dependency, and annotation icons
 local function get_extra_icons(task)
   local icons = {}
+
+  -- Priority: !!! for High, !! for Medium, ! for Low
   if task.priority then
-    table.insert(icons, string.sub(task.priority, 1, 1))
+    if task.priority == "H" then
+      table.insert(icons, "!!!")
+    elseif task.priority == "M" then
+      table.insert(icons, "!!")
+    elseif task.priority == "L" then
+      table.insert(icons, "!")
+    end
   end
+
   -- For dependencies, Taskwarrior 'export' includes a 'depends' field as a table of UUIDs
   if task.depends and #task.depends > 0 then
     table.insert(icons, "🔒")

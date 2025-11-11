@@ -48,7 +48,7 @@ describe("Renderer Module", function()
         assert.are.same(expected, renderer.format_task(task))
       end)
     
-      it("should include priority icon if present", function()
+      it("should include high priority icon (!!!)", function()
         local task = {
           id = 5,
           description = "High Priority Task",
@@ -56,7 +56,31 @@ describe("Renderer Module", function()
           priority = "H",
           uuid = "defdefdefdefdefd",
         }
-        local expected = "* [ ] High Priority Task [H] (defdefde)"
+        local expected = "* [ ] High Priority Task [!!!] (defdefde)"
+        assert.are.same(expected, renderer.format_task(task))
+      end)
+
+      it("should include medium priority icon (!!)", function()
+        local task = {
+          id = 51,
+          description = "Medium Priority Task",
+          status = "pending",
+          priority = "M",
+          uuid = "medmedmedmedmed1",
+        }
+        local expected = "* [ ] Medium Priority Task [!!] (medmedme)"
+        assert.are.same(expected, renderer.format_task(task))
+      end)
+
+      it("should include low priority icon (!)", function()
+        local task = {
+          id = 52,
+          description = "Low Priority Task",
+          status = "pending",
+          priority = "L",
+          uuid = "lowlowlowlowlow1",
+        }
+        local expected = "* [ ] Low Priority Task [!] (lowlowlo)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -95,7 +119,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "9999aaaabbbbcccc",
         }
-        local expected = "* [ ] All Icons Task (2025-11-11 09:00) [M,🔒,A] (9999aaaa)"
+        local expected = "* [ ] All Icons Task (2025-11-11 09:00) [!!,🔒,A] (9999aaaa)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
