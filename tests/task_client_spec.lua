@@ -17,7 +17,7 @@ describe("Task Client Module", function()
   it("should execute a query and parse valid JSON output", function()
     local mock_json_output = '[{"id":1,"description":"Test Task","status":"pending"}]'
     task_client._set_run_shell_command_mock(function(cmd)
-      assert.truthy(string.find(cmd, "task project:test export"))
+      assert.truthy(string.find(cmd, "task 'project:test' export"))
       return mock_json_output, 0
     end)
 
@@ -61,5 +61,23 @@ describe("Task Client Module", function()
 
     assert.is_nil(err)
     assert.are.same(0, #tasks)
+  end)
+
+  it("should properly quote complex queries with parentheses", function()
+    local complex_query = "(end.after:sow end.before=eow) (due: or due.before=sow or due.after=eow) -TNFsprint279"
+    local mock_json_output = '[{"id":1,"description":"Complex Task","status":"completed"}]'
+
+    task_client._set_run_shell_command_mock(function(cmd)
+      -- Verify the query is properly wrapped in single quotes
+      local expected_pattern = "task '%(end%.after:sow end%.before=eow%) %(due: or due%.before=sow or due%.after=eow%) %-TNFsprint279' export"
+      assert.truthy(string.find(cmd, expected_pattern), "Command should properly quote complex query with parentheses")
+      return mock_json_output, 0
+    end)
+
+    local tasks, err = task_client.execute_query(complex_query)
+
+    assert.is_nil(err)
+    assert.are.same(1, #tasks)
+    assert.are.same("Complex Task", tasks[1].description)
   end)
 end)

@@ -40,7 +40,7 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
 
     local mock_task_output = '[{"id":1,"description":"New Task 1","status":"pending","uuid":"aaaa1111bbbb2222"}]'
     task_client._set_run_shell_command_mock(function(cmd)
-      assert.truthy(string.find(cmd, "task status:pending export"))
+      assert.truthy(string.find(cmd, "task 'status:pending' export"))
       return mock_task_output, 0
     end)
 
@@ -68,7 +68,7 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
 
     local mock_task_output = '[{"id":2,"description":"Updated Task 2","status":"pending","uuid":"dddd4444eeee5555"}]'
     task_client._set_run_shell_command_mock(function(cmd)
-      assert.truthy(string.find(cmd, "task status:pending export"))
+      assert.truthy(string.find(cmd, "task 'status:pending' export"))
       return mock_task_output, 0
     end)
 
@@ -96,7 +96,7 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
 
     local mock_task_output = '[{"id":3,"description":"Waiting Task","status":"pending","uuid":"ffff6666gggg7777"}]'
     task_client._set_run_shell_command_mock(function(cmd)
-      assert.truthy(string.find(cmd, "task status:waiting export"))
+      assert.truthy(string.find(cmd, "task 'status:waiting' export"))
       return mock_task_output, 0
     end)
 

@@ -10,17 +10,22 @@ end
 
 -- Function to execute a Taskwarrior query and return JSON output
 function M.execute_query(query_string)
-  local cmd = string.format("task %s export", query_string)
+  -- Escape single quotes in the query by replacing ' with '\''
+  local escaped_query = string.gsub(query_string, "'", "'\\''")
+  -- Wrap the query in single quotes to prevent shell interpretation
+  local cmd = string.format("task '%s' export", escaped_query)
   local stdout, exit_code = _run_shell_command(cmd)
 
   if exit_code ~= 0 then
     -- Handle Taskwarrior command errors
-    return nil, "Taskwarrior command failed with exit code " .. exit_code .. ": " .. stdout
+    return nil, string.format("Taskwarrior command failed (exit code %d)\nCommand: %s\nOutput: %s",
+      exit_code, cmd, stdout)
   end
 
   local ok, parsed_json = pcall(vim.fn.json_decode, stdout)
   if not ok then
-    return nil, "Failed to parse Taskwarrior JSON output: " .. parsed_json
+    return nil, string.format("Failed to parse Taskwarrior JSON output\nCommand: %s\nError: %s\nOutput preview: %s",
+      cmd, parsed_json, string.sub(stdout, 1, 200))
   end
 
   return parsed_json
