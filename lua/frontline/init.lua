@@ -15,6 +15,8 @@ local config = {
     modify_task = "<leader>tm",
     add_annotation = "<leader>ta",
     edit_task = "<leader>te",
+    show_blocking_dependencies = "<leader>tb",
+    add_dependency = "<leader>tB",
   },
 }
 
@@ -153,6 +155,18 @@ function M.setup(opts)
       if config.mappings.edit_task then
         vim.keymap.set("n", config.mappings.edit_task, mappings.edit_task,
           vim.tbl_extend("force", opts_mapping, { desc = "Edit task in Taskwarrior editor" }))
+      end
+
+      -- Show blocking dependencies
+      if config.mappings.show_blocking_dependencies then
+        vim.keymap.set("n", config.mappings.show_blocking_dependencies, mappings.show_blocking_dependencies,
+          vim.tbl_extend("force", opts_mapping, { desc = "Show task blocking dependencies" }))
+      end
+
+      -- Add task as dependency
+      if config.mappings.add_dependency then
+        vim.keymap.set("n", config.mappings.add_dependency, mappings.add_task_as_dependency,
+          vim.tbl_extend("force", opts_mapping, { desc = "Add new task as dependency" }))
       end
     end,
     group = vim.api.nvim_create_augroup("FrontlineMappings", { clear = true }),
