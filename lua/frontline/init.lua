@@ -8,6 +8,7 @@ local mappings = require("frontline.mappings")
 -- Default configuration
 local config = {
   newlines_after_tasks = 2,
+  convert_dates_to_local = false, -- Convert UTC timestamps to local time (default: false)
   mappings = {
     toggle_done = "<leader>td",
     toggle_started = "<leader>ts",
@@ -59,7 +60,7 @@ local function refresh_tasks()
 
     local formatted_tasks = {}
     for _, task in ipairs(tasks) do
-      table.insert(formatted_tasks, renderer.format_task(task))
+      table.insert(formatted_tasks, renderer.format_task(task, config.convert_dates_to_local))
     end
 
     -- Add configured number of newlines after tasks

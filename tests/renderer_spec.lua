@@ -1,6 +1,14 @@
 
 local renderer = require("frontline.renderer")
 
+-- Helper to calculate timezone offset in seconds
+local function get_timezone_offset()
+  local now = os.time()
+  local utc_time = os.time(os.date("!*t", now))
+  local local_time = os.time(os.date("*t", now))
+  return os.difftime(local_time, utc_time)
+end
+
 -- Helper to convert UTC ISO date to expected local time string
 local function utc_to_local_string(iso_date)
   local year = tonumber(string.sub(iso_date, 1, 4))
@@ -10,7 +18,9 @@ local function utc_to_local_string(iso_date)
   local minute = tonumber(string.sub(iso_date, 12, 13))
   local second = tonumber(string.sub(iso_date, 14, 15))
 
-  local utc_time = os.time({
+  -- Properly convert UTC to local time
+  -- First, create epoch time treating the values as UTC
+  local utc_epoch = os.time({
     year = year,
     month = month,
     day = day,
@@ -20,7 +30,12 @@ local function utc_to_local_string(iso_date)
     isdst = false
   })
 
-  local local_time = os.date("*t", utc_time)
+  -- Adjust by timezone offset to get actual UTC epoch
+  local timezone_offset = get_timezone_offset()
+  local actual_utc_epoch = utc_epoch - timezone_offset
+
+  -- Convert to local time
+  local local_time = os.date("*t", actual_utc_epoch)
 
   if local_time.hour == 0 and local_time.min == 0 then
     return string.format("%04d-%02d-%02d", local_time.year, local_time.month, local_time.day)
@@ -250,5 +265,70 @@ describe("Renderer Module", function()
         local expected = "* [ ]  (22223333)"
         assert.are.same(expected, renderer.format_task(task))
       end)
-    
+
+      describe("Date conversion modes", function()
+        it("should convert UTC to local when convert_to_local is true", function()
+          local task = {
+            id = 100,
+            description = "Task with conversion",
+            status = "pending",
+            due = "20251225T103000Z",
+            uuid = "conversiontest01",
+          }
+          local expected = "* [ ] Task with conversion [" .. utc_to_local_string("20251225T103000Z") .. "] (conversi)"
+          assert.are.same(expected, renderer.format_task(task, true))
+        end)
+
+        it("should display time as-is when convert_to_local is false", function()
+          local task = {
+            id = 101,
+            description = "Task without conversion",
+            status = "pending",
+            due = "20251225T103000Z",
+            uuid = "noconversionte01",
+          }
+          local expected = "* [ ] Task without conversion [2025-12-25 10:30] (noconver)"
+          assert.are.same(expected, renderer.format_task(task, false))
+        end)
+
+        it("should apply midnight detection to converted time", function()
+          local task = {
+            id = 102,
+            description = "Midnight in local time after conversion",
+            status = "pending",
+            -- This is midnight UTC, which might be different in local time
+            due = "20251225T000000Z",
+            uuid = "midnighttest001",
+          }
+          -- Should use converted time for midnight detection
+          local expected = "* [ ] Midnight in local time after conversion [" .. utc_to_local_string("20251225T000000Z") .. "] (midnight)"
+          assert.are.same(expected, renderer.format_task(task, true))
+        end)
+
+        it("should apply midnight detection to non-converted time", function()
+          local task = {
+            id = 103,
+            description = "Midnight without conversion",
+            status = "pending",
+            due = "20251225T000000Z",
+            uuid = "midnightnoconv1",
+          }
+          -- Midnight in UTC (00:00) should be omitted even without conversion
+          local expected = "* [ ] Midnight without conversion [2025-12-25] (midnight)"
+          assert.are.same(expected, renderer.format_task(task, false))
+        end)
+
+        it("should handle scheduled dates with conversion disabled", function()
+          local task = {
+            id = 104,
+            description = "Scheduled without conversion",
+            status = "pending",
+            scheduled = "20251220T143000Z",
+            uuid = "schednoconv0001",
+          }
+          local expected = "* [ ] Scheduled without conversion (2025-12-20 14:30) (schednoc)"
+          assert.are.same(expected, renderer.format_task(task, false))
+        end)
+      end)
+
 end)

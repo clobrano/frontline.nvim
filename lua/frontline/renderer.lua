@@ -1,7 +1,17 @@
 local M = {}
 
--- Helper to parse ISO 8601 date format from Taskwarrior and convert to local time
-local function parse_iso_date(iso_date)
+-- Helper to calculate timezone offset in seconds
+local function get_timezone_offset()
+  local now = os.time()
+  local utc_time = os.time(os.date("!*t", now))
+  local local_time = os.time(os.date("*t", now))
+  return os.difftime(local_time, utc_time)
+end
+
+-- Helper to parse ISO 8601 date format from Taskwarrior
+-- If convert_to_local is true, converts UTC to local time
+-- If convert_to_local is false, displays time as-is from Taskwarrior
+local function parse_iso_date(iso_date, convert_to_local)
   if not iso_date then
     return nil
   end
@@ -12,40 +22,59 @@ local function parse_iso_date(iso_date)
   local minute = tonumber(string.sub(iso_date, 12, 13))
   local second = tonumber(string.sub(iso_date, 14, 15))
 
-  -- Convert UTC timestamp to epoch time
-  local utc_time = os.time({
-    year = year,
-    month = month,
-    day = day,
-    hour = hour,
-    min = minute,
-    sec = second,
-    isdst = false
-  })
+  local final_time
 
-  -- Convert to local time
-  local local_time = os.date("*t", utc_time)
+  if convert_to_local then
+    -- Properly convert UTC to local time
+    -- First, create epoch time treating the values as UTC
+    local utc_epoch = os.time({
+      year = year,
+      month = month,
+      day = day,
+      hour = hour,
+      min = minute,
+      sec = second,
+      isdst = false
+    })
 
-  -- Omit time if it's 00:00 (midnight) in local time
-  if local_time.hour == 0 and local_time.min == 0 then
-    return string.format("%04d-%02d-%02d", local_time.year, local_time.month, local_time.day)
+    -- Adjust by timezone offset to get actual UTC epoch
+    local timezone_offset = get_timezone_offset()
+    local actual_utc_epoch = utc_epoch - timezone_offset
+
+    -- Convert to local time
+    final_time = os.date("*t", actual_utc_epoch)
   else
-    return string.format("%04d-%02d-%02d %02d:%02d", local_time.year, local_time.month, local_time.day, local_time.hour, local_time.min)
+    -- Display time as-is without conversion
+    final_time = {
+      year = year,
+      month = month,
+      day = day,
+      hour = hour,
+      min = minute,
+      sec = second
+    }
+  end
+
+  -- Omit time if it's 00:00 (midnight) in the final time
+  if final_time.hour == 0 and final_time.min == 0 then
+    return string.format("%04d-%02d-%02d", final_time.year, final_time.month, final_time.day)
+  else
+    return string.format("%04d-%02d-%02d %02d:%02d", final_time.year, final_time.month, final_time.day, final_time.hour, final_time.min)
   end
 end
 
 -- Helper to format scheduled date (rounded parenthesis)
-local function format_scheduled_date(task)
+local function format_scheduled_date(task, convert_to_local)
   if task.scheduled then
-    return string.format("(%s)", parse_iso_date(task.scheduled))
+    return string.format("(%s)", parse_iso_date(task.scheduled, convert_to_local))
   end
   return ""
 end
 
 -- Helper to format due date (squared brackets)
-local function format_due_date(task)
+local function format_due_date(task, convert_to_local)
   if task.due then
-    return string.format("[%s]", parse_iso_date(task.due))
+    return string.format("[%s]", parse_iso_date(task.due, convert_to_local))
   end
   return ""
 end
@@ -92,11 +121,17 @@ local function get_extra_icons(task)
 end
 
 -- Function to format a single Taskwarrior task
-function M.format_task(task)
+-- convert_to_local: if true, converts UTC timestamps to local time; if false, displays as-is
+function M.format_task(task, convert_to_local)
+  -- Default to true for backward compatibility
+  if convert_to_local == nil then
+    convert_to_local = true
+  end
+
   local status = get_status_indicator(task)
   local description = task.description or ""
-  local scheduled_str = format_scheduled_date(task)
-  local due_date_str = format_due_date(task)
+  local scheduled_str = format_scheduled_date(task, convert_to_local)
+  local due_date_str = format_due_date(task, convert_to_local)
   local extra_icons_str = get_extra_icons(task)
   local short_hash = string.sub(task.uuid or "", 1, 8)
 
