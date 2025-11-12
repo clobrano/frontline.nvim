@@ -83,6 +83,8 @@ end
 local function get_status_indicator(task)
   if task.status == "completed" then
     return "[x]"
+  elseif task.status == "deleted" then
+    return "[-]"
   elseif task.status == "pending" and task.start then
     return "[S]"
   else

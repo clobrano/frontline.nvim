@@ -518,4 +518,51 @@ function M.edit_task()
   vim.cmd("startinsert")
 end
 
+-- Undo the last Taskwarrior action (global undo, not per-task)
+function M.undo_task()
+  -- Note: Taskwarrior's undo is global - it reverts the most recent operation
+  -- across all tasks, not just the task under cursor
+
+  -- First, get the undo preview by running task undo with 'no'
+  local preview_output = vim.fn.system("echo 'no' | task undo")
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Failed to get undo preview", vim.log.levels.ERROR)
+    return
+  end
+
+  -- Display the undo preview
+  vim.api.nvim_echo({{preview_output, "Normal"}}, true, {})
+
+  -- Ask user for confirmation
+  vim.ui.select(
+    {"Yes, undo the last action", "No, cancel"},
+    {
+      prompt = "Confirm undo:",
+      format_item = function(item)
+        return item
+      end
+    },
+    function(choice, idx)
+      if not choice or idx == 2 then
+        vim.notify("Undo cancelled", vim.log.levels.INFO)
+        return
+      end
+
+      -- Execute the undo
+      vim.notify("Undoing last action...", vim.log.levels.INFO)
+      local undo_output = vim.fn.system("echo 'yes' | task undo")
+      local exit_code = vim.v.shell_error
+
+      if exit_code ~= 0 then
+        vim.notify("Undo failed: " .. undo_output, vim.log.levels.ERROR)
+        return
+      end
+
+      vim.notify("Last action undone", vim.log.levels.INFO)
+      require("frontline").refresh_current_buffer()
+    end
+  )
+end
+
 return M

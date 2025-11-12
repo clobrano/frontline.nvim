@@ -17,6 +17,7 @@ local config = {
     edit_task = "<leader>te",
     show_blocking_dependencies = "<leader>tb",
     add_dependency = "<leader>tB",
+    undo_task = "<leader>tu",
   },
 }
 
@@ -167,6 +168,12 @@ function M.setup(opts)
       if config.mappings.add_dependency then
         vim.keymap.set("n", config.mappings.add_dependency, mappings.add_task_as_dependency,
           vim.tbl_extend("force", opts_mapping, { desc = "Add new task as dependency" }))
+      end
+
+      -- Undo task
+      if config.mappings.undo_task then
+        vim.keymap.set("n", config.mappings.undo_task, mappings.undo_task,
+          vim.tbl_extend("force", opts_mapping, { desc = "Undo last action on task" }))
       end
     end,
     group = vim.api.nvim_create_augroup("FrontlineMappings", { clear = true }),
