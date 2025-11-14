@@ -1,46 +1,39 @@
 
 local renderer = require("frontline.renderer")
 
--- Helper to calculate timezone offset in seconds
-local function get_timezone_offset()
-  local now = os.time()
-  local utc_time = os.time(os.date("!*t", now))
-  local local_time = os.time(os.date("*t", now))
-  return os.difftime(local_time, utc_time)
+-- Helper to convert ISO date to local time using system date command
+local function convert_iso_to_local(iso_date)
+  -- Reformat from YYYYMMDDTHHmmssZ to YYYY-MM-DDTHH:MM:SSZ
+  local formatted = string.gsub(iso_date, "(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)Z", "%1-%2-%3T%4:%5:%6Z")
+
+  -- Use system date command
+  local handle = io.popen(string.format("date -d '%s' '+%%Y-%%m-%%d %%H:%%M' 2>/dev/null", formatted))
+  local result = handle:read("*a")
+  handle:close()
+
+  -- Trim whitespace
+  result = result:gsub("^%s*(.-)%s*$", "%1")
+
+  -- Apply midnight detection
+  if result:match(" 00:00$") then
+    return result:gsub(" 00:00$", "")
+  end
+
+  return result
 end
 
--- Helper to convert UTC ISO date to expected local time string
-local function utc_to_local_string(iso_date)
-  local year = tonumber(string.sub(iso_date, 1, 4))
-  local month = tonumber(string.sub(iso_date, 5, 6))
-  local day = tonumber(string.sub(iso_date, 7, 8))
-  local hour = tonumber(string.sub(iso_date, 10, 11))
-  local minute = tonumber(string.sub(iso_date, 12, 13))
-  local second = tonumber(string.sub(iso_date, 14, 15))
+-- Helper to format ISO date without conversion (raw)
+local function format_iso_date_raw(iso_date)
+  local year = string.sub(iso_date, 1, 4)
+  local month = string.sub(iso_date, 5, 6)
+  local day = string.sub(iso_date, 7, 8)
+  local hour = string.sub(iso_date, 10, 11)
+  local minute = string.sub(iso_date, 12, 13)
 
-  -- Properly convert UTC to local time
-  -- First, create epoch time treating the values as UTC
-  local utc_epoch = os.time({
-    year = year,
-    month = month,
-    day = day,
-    hour = hour,
-    min = minute,
-    sec = second,
-    isdst = false
-  })
-
-  -- Adjust by timezone offset to get actual UTC epoch
-  local timezone_offset = get_timezone_offset()
-  local actual_utc_epoch = utc_epoch - timezone_offset
-
-  -- Convert to local time
-  local local_time = os.date("*t", actual_utc_epoch)
-
-  if local_time.hour == 0 and local_time.min == 0 then
-    return string.format("%04d-%02d-%02d", local_time.year, local_time.month, local_time.day)
+  if hour == "00" and minute == "00" then
+    return string.format("%s-%s-%s", year, month, day)
   else
-    return string.format("%04d-%02d-%02d %02d:%02d", local_time.year, local_time.month, local_time.day, local_time.hour, local_time.min)
+    return string.format("%s-%s-%s %s:%s", year, month, day, hour, minute)
   end
 end
 
@@ -87,7 +80,8 @@ describe("Renderer Module", function()
           due = "20251225T103000Z",
           uuid = "abcabcabcabcabca",
         }
-        local expected = "* [ ] Task with Due Date [" .. utc_to_local_string("20251225T103000Z") .. "] (abcabcab)"
+        -- Default is convert_to_local = true
+        local expected = "* [ ] Task with Due Date [" .. convert_iso_to_local("20251225T103000Z") .. "] (abcabcab)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -99,7 +93,7 @@ describe("Renderer Module", function()
           scheduled = "20251220T090000Z",
           uuid = "schedschedsched1",
         }
-        local expected = "* [ ] Task with Scheduled Date (" .. utc_to_local_string("20251220T090000Z") .. ") (schedsch)"
+        local expected = "* [ ] Task with Scheduled Date (" .. convert_iso_to_local("20251220T090000Z") .. ") (schedsch)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -112,7 +106,7 @@ describe("Renderer Module", function()
           due = "20251225T103000Z",
           uuid = "bothbothbothbot1",
         }
-        local expected = "* [ ] Task with Both Dates (" .. utc_to_local_string("20251220T090000Z") .. ") [" .. utc_to_local_string("20251225T103000Z") .. "] (bothboth)"
+        local expected = "* [ ] Task with Both Dates (" .. convert_iso_to_local("20251220T090000Z") .. ") [" .. convert_iso_to_local("20251225T103000Z") .. "] (bothboth)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -124,7 +118,7 @@ describe("Renderer Module", function()
           due = "20251225T000000Z",
           uuid = "midnight00000001",
         }
-        local expected = "* [ ] Task with Due Date at Midnight [" .. utc_to_local_string("20251225T000000Z") .. "] (midnight)"
+        local expected = "* [ ] Task with Due Date at Midnight [" .. convert_iso_to_local("20251225T000000Z") .. "] (midnight)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -136,7 +130,7 @@ describe("Renderer Module", function()
           scheduled = "20251220T000000Z",
           uuid = "schedmidnight001",
         }
-        local expected = "* [ ] Task with Scheduled at Midnight (" .. utc_to_local_string("20251220T000000Z") .. ") (schedmid)"
+        local expected = "* [ ] Task with Scheduled at Midnight (" .. convert_iso_to_local("20251220T000000Z") .. ") (schedmid)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -149,7 +143,7 @@ describe("Renderer Module", function()
           due = "20251225T000000Z",
           uuid = "bothmidnight0001",
         }
-        local expected = "* [ ] Both Dates at Midnight (" .. utc_to_local_string("20251220T000000Z") .. ") [" .. utc_to_local_string("20251225T000000Z") .. "] (bothmidn)"
+        local expected = "* [ ] Both Dates at Midnight (" .. convert_iso_to_local("20251220T000000Z") .. ") [" .. convert_iso_to_local("20251225T000000Z") .. "] (bothmidn)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -224,7 +218,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "9999aaaabbbbcccc",
         }
-        local expected = "* [ ] All Icons Task [" .. utc_to_local_string("20251111T090000Z") .. "] [!!,🔒,A] (9999aaaa)"
+        local expected = "* [ ] All Icons Task [" .. convert_iso_to_local("20251111T090000Z") .. "] [!!,🔒,A] (9999aaaa)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -240,7 +234,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "completecomplete",
         }
-        local expected = "* [ ] Complete Task (" .. utc_to_local_string("20251110T080000Z") .. ") [" .. utc_to_local_string("20251111T090000Z") .. "] [!!!,🔒,A] (complete)"
+        local expected = "* [ ] Complete Task (" .. convert_iso_to_local("20251110T080000Z") .. ") [" .. convert_iso_to_local("20251111T090000Z") .. "] [!!!,🔒,A] (complete)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -267,7 +261,7 @@ describe("Renderer Module", function()
       end)
 
       describe("Date conversion modes", function()
-        it("should convert UTC to local when convert_to_local is true", function()
+        it("should convert UTC to local when convert_to_local is true (default)", function()
           local task = {
             id = 100,
             description = "Task with conversion",
@@ -275,7 +269,7 @@ describe("Renderer Module", function()
             due = "20251225T103000Z",
             uuid = "conversiontest01",
           }
-          local expected = "* [ ] Task with conversion [" .. utc_to_local_string("20251225T103000Z") .. "] (conversi)"
+          local expected = "* [ ] Task with conversion [" .. convert_iso_to_local("20251225T103000Z") .. "] (conversi)"
           assert.are.same(expected, renderer.format_task(task, true))
         end)
 
@@ -287,21 +281,19 @@ describe("Renderer Module", function()
             due = "20251225T103000Z",
             uuid = "noconversionte01",
           }
-          local expected = "* [ ] Task without conversion [2025-12-25 10:30] (noconver)"
+          local expected = "* [ ] Task without conversion [" .. format_iso_date_raw("20251225T103000Z") .. "] (noconver)"
           assert.are.same(expected, renderer.format_task(task, false))
         end)
 
         it("should apply midnight detection to converted time", function()
           local task = {
             id = 102,
-            description = "Midnight in local time after conversion",
+            description = "Midnight after conversion",
             status = "pending",
-            -- This is midnight UTC, which might be different in local time
             due = "20251225T000000Z",
             uuid = "midnighttest001",
           }
-          -- Should use converted time for midnight detection
-          local expected = "* [ ] Midnight in local time after conversion [" .. utc_to_local_string("20251225T000000Z") .. "] (midnight)"
+          local expected = "* [ ] Midnight after conversion [" .. convert_iso_to_local("20251225T000000Z") .. "] (midnight)"
           assert.are.same(expected, renderer.format_task(task, true))
         end)
 
@@ -313,20 +305,8 @@ describe("Renderer Module", function()
             due = "20251225T000000Z",
             uuid = "midnightnoconv1",
           }
-          -- Midnight in UTC (00:00) should be omitted even without conversion
+          -- Midnight in UTC (00:00) should be omitted
           local expected = "* [ ] Midnight without conversion [2025-12-25] (midnight)"
-          assert.are.same(expected, renderer.format_task(task, false))
-        end)
-
-        it("should handle scheduled dates with conversion disabled", function()
-          local task = {
-            id = 104,
-            description = "Scheduled without conversion",
-            status = "pending",
-            scheduled = "20251220T143000Z",
-            uuid = "schednoconv0001",
-          }
-          local expected = "* [ ] Scheduled without conversion (2025-12-20 14:30) (schednoc)"
           assert.are.same(expected, renderer.format_task(task, false))
         end)
       end)

@@ -1,66 +1,62 @@
 local M = {}
 
--- Helper to calculate timezone offset in seconds
-local function get_timezone_offset()
-  local now = os.time()
-  local utc_time = os.time(os.date("!*t", now))
-  local local_time = os.time(os.date("*t", now))
-  return os.difftime(local_time, utc_time)
+-- Helper to convert ISO 8601 date from Taskwarrior (YYYYMMDDTHHmmssZ) to local time
+-- Uses the system's 'date' command to handle timezone conversion and DST
+local function convert_utc_to_local(iso_date)
+  if not iso_date then
+    return nil
+  end
+
+  -- Reformat from YYYYMMDDTHHmmssZ to YYYY-MM-DDTHH:MM:SSZ (standard ISO 8601)
+  local formatted = string.gsub(iso_date, "(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)Z", "%1-%2-%3T%4:%5:%6Z")
+
+  -- Use system date command to convert to local time
+  local cmd = string.format("date -d '%s' '+%%Y-%%m-%%d %%H:%%M' 2>/dev/null", formatted)
+  local result = vim.fn.system(cmd)
+  local exit_code = vim.v.shell_error
+
+  if exit_code ~= 0 then
+    -- Fallback: display as-is if date command fails
+    return parse_iso_date_raw(iso_date)
+  end
+
+  -- Trim whitespace and return
+  return vim.trim(result)
 end
 
--- Helper to parse ISO 8601 date format from Taskwarrior
--- If convert_to_local is true, converts UTC to local time
--- If convert_to_local is false, displays time as-is from Taskwarrior
+-- Helper to parse ISO 8601 date format without conversion (raw display)
+local function parse_iso_date_raw(iso_date)
+  if not iso_date then
+    return nil
+  end
+  local year = string.sub(iso_date, 1, 4)
+  local month = string.sub(iso_date, 5, 6)
+  local day = string.sub(iso_date, 7, 8)
+  local hour = string.sub(iso_date, 10, 11)
+  local minute = string.sub(iso_date, 12, 13)
+
+  return string.format("%s-%s-%s %s:%s", year, month, day, hour, minute)
+end
+
+-- Helper to parse and optionally convert ISO 8601 date
 local function parse_iso_date(iso_date, convert_to_local)
   if not iso_date then
     return nil
   end
-  local year = tonumber(string.sub(iso_date, 1, 4))
-  local month = tonumber(string.sub(iso_date, 5, 6))
-  local day = tonumber(string.sub(iso_date, 7, 8))
-  local hour = tonumber(string.sub(iso_date, 10, 11))
-  local minute = tonumber(string.sub(iso_date, 12, 13))
-  local second = tonumber(string.sub(iso_date, 14, 15))
 
-  local final_time
-
+  local date_str
   if convert_to_local then
-    -- Properly convert UTC to local time
-    -- First, create epoch time treating the values as UTC
-    local utc_epoch = os.time({
-      year = year,
-      month = month,
-      day = day,
-      hour = hour,
-      min = minute,
-      sec = second,
-      isdst = false
-    })
-
-    -- Adjust by timezone offset to get actual UTC epoch
-    local timezone_offset = get_timezone_offset()
-    local actual_utc_epoch = utc_epoch - timezone_offset
-
-    -- Convert to local time
-    final_time = os.date("*t", actual_utc_epoch)
+    date_str = convert_utc_to_local(iso_date)
   else
-    -- Display time as-is without conversion
-    final_time = {
-      year = year,
-      month = month,
-      day = day,
-      hour = hour,
-      min = minute,
-      sec = second
-    }
+    date_str = parse_iso_date_raw(iso_date)
   end
 
-  -- Omit time if it's 00:00 (midnight) in the final time
-  if final_time.hour == 0 and final_time.min == 0 then
-    return string.format("%04d-%02d-%02d", final_time.year, final_time.month, final_time.day)
-  else
-    return string.format("%04d-%02d-%02d %02d:%02d", final_time.year, final_time.month, final_time.day, final_time.hour, final_time.min)
+  -- Apply midnight detection: omit time if it's 00:00
+  if string.match(date_str, " 00:00$") then
+    return string.gsub(date_str, " 00:00$", "")
   end
+
+  return date_str
 end
 
 -- Helper to format scheduled date (rounded parenthesis)
@@ -123,9 +119,9 @@ local function get_extra_icons(task)
 end
 
 -- Function to format a single Taskwarrior task
--- convert_to_local: if true, converts UTC timestamps to local time; if false, displays as-is
+-- convert_to_local: if true, converts UTC to local time using system date command
 function M.format_task(task, convert_to_local)
-  -- Default to true for backward compatibility
+  -- Default to true (convert to local time by default)
   if convert_to_local == nil then
     convert_to_local = true
   end

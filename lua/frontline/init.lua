@@ -8,7 +8,7 @@ local mappings = require("frontline.mappings")
 -- Default configuration
 local config = {
   newlines_after_tasks = 2,
-  convert_dates_to_local = false, -- Convert UTC timestamps to local time (default: false)
+  convert_dates_to_local = true, -- Convert UTC timestamps to local time using system date command (default: true)
   mappings = {
     toggle_done = "<leader>td",
     toggle_started = "<leader>ts",
