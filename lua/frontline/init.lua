@@ -18,6 +18,7 @@ local config = {
     show_blocking_dependencies = "<leader>tb",
     add_dependency = "<leader>tB",
     undo_task = "<leader>tu",
+    create_task = "<leader>tn",
   },
 }
 
@@ -174,6 +175,12 @@ function M.setup(opts)
       if config.mappings.undo_task then
         vim.keymap.set("n", config.mappings.undo_task, mappings.undo_task,
           vim.tbl_extend("force", opts_mapping, { desc = "Undo last action on task" }))
+      end
+
+      -- Create new task
+      if config.mappings.create_task then
+        vim.keymap.set("n", config.mappings.create_task, mappings.create_new_task,
+          vim.tbl_extend("force", opts_mapping, { desc = "Create new task with smart pre-fill" }))
       end
     end,
     group = vim.api.nvim_create_augroup("FrontlineMappings", { clear = true }),

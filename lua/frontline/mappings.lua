@@ -565,4 +565,85 @@ function M.undo_task()
   )
 end
 
+-- Helper to extract project from a task on the current line
+local function get_project_from_task_line()
+  local hash = M.get_task_hash_under_cursor()
+  if not hash then
+    return nil
+  end
+
+  -- Get task details
+  local task_json = vim.fn.system(string.format("task %s export", hash))
+  if vim.v.shell_error ~= 0 then
+    return nil
+  end
+
+  local success, tasks = pcall(vim.fn.json_decode, task_json)
+  if not success or not tasks or #tasks == 0 then
+    return nil
+  end
+
+  return tasks[1].project
+end
+
+-- Helper to extract project from header filter (e.g., "# Tasks | project:myproj")
+local function get_project_from_header()
+  local line = vim.api.nvim_get_current_line()
+
+  -- Match header with filter: # Header | filter
+  local filter = string.match(line, "^#+ .* | (.+)$")
+  if not filter then
+    return nil
+  end
+
+  -- Extract project from filter (project:name or proj:name)
+  local project = string.match(filter, "proj[ect]*:([%w%.%-_]+)")
+  return project
+end
+
+-- Create a new task with smart pre-fill based on context
+function M.create_new_task()
+  -- Determine pre-fill based on cursor position
+  local prefill = ""
+
+  -- First, check if cursor is on a task line
+  local project_from_task = get_project_from_task_line()
+  if project_from_task then
+    prefill = string.format("project:%s ", project_from_task)
+  else
+    -- Check if cursor is on a header with project filter
+    local project_from_header = get_project_from_header()
+    if project_from_header then
+      prefill = string.format("project:%s ", project_from_header)
+    end
+  end
+
+  -- Prompt user for task input
+  vim.ui.input(
+    {
+      prompt = "New task: ",
+      default = prefill,
+    },
+    function(input)
+      if not input or input == "" then
+        vim.notify("Task creation cancelled", vim.log.levels.INFO)
+        return
+      end
+
+      -- Create the task
+      local cmd = string.format("task add %s", input)
+      local output = vim.fn.system(cmd)
+      local exit_code = vim.v.shell_error
+
+      if exit_code ~= 0 then
+        vim.notify("Failed to create task: " .. output, vim.log.levels.ERROR)
+        return
+      end
+
+      vim.notify("Task created successfully", vim.log.levels.INFO)
+      require("frontline").refresh_current_buffer()
+    end
+  )
+end
+
 return M
