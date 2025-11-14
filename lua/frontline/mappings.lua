@@ -599,10 +599,14 @@ local function get_context_from_header()
   -- Extract project from filter (project:name or proj:name)
   local project = string.match(filter, "proj[ect]*:([%w%.%-_]+)")
 
-  -- Extract tags (words starting with +)
+  -- Extract tags (words starting with +), excluding virtual tags
+  -- Virtual tags are all uppercase (e.g., PENDING, COMPLETED, OVERDUE, WEEK, etc.)
   local tags = {}
   for tag in string.gmatch(filter, "%+([%w_%-]+)") do
-    table.insert(tags, tag)
+    -- Only include non-virtual tags (not all uppercase)
+    if tag ~= tag:upper() then
+      table.insert(tags, tag)
+    end
   end
 
   return project, (#tags > 0 and tags or nil)
