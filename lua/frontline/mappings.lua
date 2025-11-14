@@ -586,19 +586,26 @@ local function get_project_from_task_line()
   return tasks[1].project
 end
 
--- Helper to extract project from header filter (e.g., "# Tasks | project:myproj")
-local function get_project_from_header()
+-- Helper to extract project and tags from header filter (e.g., "# Tasks | project:myproj +tag1 +tag2")
+local function get_context_from_header()
   local line = vim.api.nvim_get_current_line()
 
   -- Match header with filter: # Header | filter
   local filter = string.match(line, "^#+ .* | (.+)$")
   if not filter then
-    return nil
+    return nil, nil
   end
 
   -- Extract project from filter (project:name or proj:name)
   local project = string.match(filter, "proj[ect]*:([%w%.%-_]+)")
-  return project
+
+  -- Extract tags (words starting with +)
+  local tags = {}
+  for tag in string.gmatch(filter, "%+([%w_%-]+)") do
+    table.insert(tags, tag)
+  end
+
+  return project, (#tags > 0 and tags or nil)
 end
 
 -- Create a new task with smart pre-fill based on context
@@ -611,10 +618,22 @@ function M.create_new_task()
   if project_from_task then
     prefill = string.format("project:%s ", project_from_task)
   else
-    -- Check if cursor is on a header with project filter
-    local project_from_header = get_project_from_header()
-    if project_from_header then
-      prefill = string.format("project:%s ", project_from_header)
+    -- Check if cursor is on a header with project and/or tags filter
+    local project_from_header, tags_from_header = get_context_from_header()
+    if project_from_header or tags_from_header then
+      local parts = {}
+
+      if project_from_header then
+        table.insert(parts, string.format("project:%s", project_from_header))
+      end
+
+      if tags_from_header then
+        for _, tag in ipairs(tags_from_header) do
+          table.insert(parts, string.format("+%s", tag))
+        end
+      end
+
+      prefill = table.concat(parts, " ") .. " "
     end
   end
 
