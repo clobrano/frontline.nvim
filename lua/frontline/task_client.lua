@@ -31,10 +31,18 @@ function M.execute_query(query_string, workspace_rc)
       exit_code, cmd, stdout)
   end
 
-  local ok, parsed_json = pcall(vim.fn.json_decode, stdout)
+  -- Filter out Taskwarrior informational messages (e.g., "TASKRC override: ...")
+  -- These messages appear before the JSON output when using rc: override
+  local cleaned_stdout = stdout
+  if workspace_rc then
+    -- Remove lines starting with "TASKRC override:"
+    cleaned_stdout = string.gsub(stdout, "^TASKRC override:.-\n", "")
+  end
+
+  local ok, parsed_json = pcall(vim.fn.json_decode, cleaned_stdout)
   if not ok then
     return nil, string.format("Failed to parse Taskwarrior JSON output\nCommand: %s\nError: %s\nOutput preview: %s",
-      cmd, parsed_json, string.sub(stdout, 1, 200))
+      cmd, parsed_json, string.sub(cleaned_stdout, 1, 200))
   end
 
   return parsed_json
