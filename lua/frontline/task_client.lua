@@ -9,11 +9,20 @@ local function _run_shell_command(cmd)
 end
 
 -- Function to execute a Taskwarrior query and return JSON output
-function M.execute_query(query_string)
+-- workspace_rc: optional path to a taskwarrior rc file for workspace-specific queries
+function M.execute_query(query_string, workspace_rc)
   -- Escape single quotes in the query by replacing ' with '\''
   local escaped_query = string.gsub(query_string, "'", "'\\''")
-  -- Wrap the query in single quotes to prevent shell interpretation
-  local cmd = string.format("task '%s' export", escaped_query)
+
+  -- Build command with optional rc file
+  local cmd
+  if workspace_rc and workspace_rc ~= "" then
+    local escaped_rc = string.gsub(workspace_rc, "'", "'\\''")
+    cmd = string.format("task rc:'%s' '%s' export", escaped_rc, escaped_query)
+  else
+    cmd = string.format("task '%s' export", escaped_query)
+  end
+
   local stdout, exit_code = _run_shell_command(cmd)
 
   if exit_code ~= 0 then

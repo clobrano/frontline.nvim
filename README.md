@@ -11,6 +11,7 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 - ⚙️ Configurable blank lines after task lists
 - ⌨️ Interactive task management with keybindings
 - 🕐 Local timezone display for dates and times
+- 🗂️ Multiple Taskwarrior workspaces support with `@workspace` syntax
 
 ## Installation
 
@@ -51,6 +52,37 @@ Add Taskwarrior queries to your Markdown headers using the pipe `|` separator:
 
 # Due This Week | due.before:eow
 ```
+
+### Multiple Workspaces
+
+Frontline supports multiple Taskwarrior databases (workspaces) using the `@workspace` syntax in your queries:
+
+```markdown
+# Personal Tasks | @personal status:pending
+
+# Work Tasks | @work project:myproject status:pending
+
+# Default Workspace Tasks | status:pending
+```
+
+**Configuration:**
+
+```lua
+require('frontline').setup({
+  workspaces = {
+    personal = "~/.config/taskwarrior/personal/.taskrc",
+    work = "~/.config/taskwarrior/work/.taskrc",
+  },
+  default_workspace = "personal",  -- Used when no @workspace specified
+})
+```
+
+**Key Points:**
+- Use `@workspace_name` in your query to specify which workspace to use
+- If no workspace is specified, the `default_workspace` is used
+- If `default_workspace` is `nil`, the system's default Taskwarrior database is used
+- A notification displays the current workspace when opening a file
+- All task operations (create, modify, toggle, etc.) use the current workspace context
 
 ### Task Format
 
@@ -124,6 +156,11 @@ After any modification, the task list automatically refreshes to show the update
 ```lua
 require('frontline').setup({
   newlines_after_tasks = 2,  -- Number of blank lines after task lists (default: 2)
+  workspaces = {
+    personal = "~/.config/taskwarrior/personal/.taskrc",
+    work = "~/.config/taskwarrior/work/.taskrc",
+  },
+  default_workspace = "personal",  -- Default workspace when none specified (nil = system taskwarrior)
   mappings = {
     toggle_done = "<leader>td",      -- Toggle task done/undone
     toggle_started = "<leader>ts",   -- Toggle task started/unstarted
@@ -139,6 +176,8 @@ require('frontline').setup({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `newlines_after_tasks` | number | 2 | Number of blank lines to add after each task list |
+| `workspaces` | table | `{}` | Map of workspace names to Taskwarrior rc file paths |
+| `default_workspace` | string | `nil` | Default workspace name (nil uses system taskwarrior) |
 | `mappings.toggle_done` | string | `"<leader>td"` | Keybinding to toggle task done/undone |
 | `mappings.toggle_started` | string | `"<leader>ts"` | Keybinding to toggle task started/unstarted |
 | `mappings.modify_task` | string | `"<leader>tm"` | Keybinding to modify task |

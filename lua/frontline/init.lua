@@ -9,6 +9,12 @@ local mappings = require("frontline.mappings")
 local config = {
   newlines_after_tasks = 2,
   convert_dates_to_local = true, -- Convert UTC timestamps to local time using system date command (default: true)
+  workspaces = {
+    -- Example configuration:
+    -- personal = "~/.config/taskwarrior/personal/.taskrc",
+    -- work = "~/.config/taskwarrior/work/.taskrc",
+  },
+  default_workspace = nil, -- Name of the default workspace (uses system taskwarrior if nil)
   mappings = {
     toggle_done = "<leader>td",
     toggle_started = "<leader>ts",
@@ -22,6 +28,38 @@ local config = {
   },
 }
 
+-- Current workspace context (tracked per buffer)
+local current_workspace = nil
+
+-- Helper function to get workspace rc file path
+local function get_workspace_rc(workspace_name)
+  if not workspace_name or workspace_name == "" then
+    return nil
+  end
+
+  if config.workspaces[workspace_name] then
+    return vim.fn.expand(config.workspaces[workspace_name])
+  end
+
+  vim.notify(string.format("Unknown workspace: %s", workspace_name), vim.log.levels.WARN)
+  return nil
+end
+
+-- Helper function to set current workspace context
+local function set_current_workspace(workspace_name)
+  current_workspace = workspace_name
+end
+
+-- Expose function to get current workspace
+function M.get_current_workspace()
+  return current_workspace
+end
+
+-- Expose function to get config
+function M.get_config()
+  return config
+end
+
 -- Function to refresh tasks in the current buffer
 local function refresh_tasks()
   local bufnr = vim.api.nvim_get_current_buf()
@@ -34,6 +72,7 @@ local function refresh_tasks()
   -- Process queries one at a time, re-parsing after each update
   -- to keep line numbers accurate
   local processed_queries = {}
+  local workspace_notified = false
 
   while true do
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -55,7 +94,21 @@ local function refresh_tasks()
       break
     end
 
-    local tasks, err = task_client.execute_query(query_info.query)
+    -- Determine workspace for this query
+    local workspace = query_info.workspace or config.default_workspace
+    local workspace_rc = workspace and get_workspace_rc(workspace) or nil
+
+    -- Set current workspace context
+    set_current_workspace(workspace)
+
+    -- Show workspace notification once per refresh
+    if not workspace_notified then
+      workspace_notified = true
+      local workspace_display = workspace or "default (system)"
+      vim.notify(string.format("Frontline workspace: %s", workspace_display), vim.log.levels.INFO)
+    end
+
+    local tasks, err = task_client.execute_query(query_info.query, workspace_rc)
     if err then
       -- TODO: Display error message at the bottom of the Neovim buffer (Task 7.1)
       print("Taskwarrior Error: " .. err)
