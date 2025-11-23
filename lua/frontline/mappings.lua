@@ -34,9 +34,53 @@ local function get_workspace_rc()
   return nil
 end
 
+-- Helper function to parse workspace from input string and return workspace, cleaned input
+local function parse_workspace_from_input(input)
+  if not input then
+    return nil, input
+  end
+
+  -- Extract workspace from input (e.g., @personal, @work)
+  local workspace = string.match(input, "@([%w_%-]+)")
+
+  if not workspace then
+    return nil, input
+  end
+
+  -- Remove workspace from input string
+  local cleaned_input = string.gsub(input, "%s*@[%w_%-]+%s*", " ")
+  cleaned_input = string.gsub(cleaned_input, "^%s+", "") -- trim leading spaces
+  cleaned_input = string.gsub(cleaned_input, "%s+$", "") -- trim trailing spaces
+
+  return workspace, cleaned_input
+end
+
+-- Helper function to get workspace rc path, with optional override
+local function get_workspace_rc_with_override(workspace_override)
+  local frontline = require("frontline")
+  local config = frontline.get_config()
+
+  -- Use override if provided, otherwise use current workspace
+  local workspace = workspace_override or frontline.get_current_workspace()
+
+  if not workspace then
+    return nil
+  end
+
+  if config and config.workspaces and config.workspaces[workspace] then
+    return vim.fn.expand(config.workspaces[workspace])
+  end
+
+  if workspace_override then
+    vim.notify(string.format("Unknown workspace: %s", workspace), vim.log.levels.WARN)
+  end
+
+  return nil
+end
+
 -- Helper function to build task command with optional rc file
-local function build_task_command(task_args)
-  local workspace_rc = get_workspace_rc()
+local function build_task_command(task_args, workspace_override)
+  local workspace_rc = get_workspace_rc_with_override(workspace_override)
 
   if workspace_rc and workspace_rc ~= "" then
     local escaped_rc = string.gsub(workspace_rc, "'", "'\\''")
@@ -47,8 +91,8 @@ local function build_task_command(task_args)
 end
 
 -- Execute a task command and return success status
-local function execute_task_command(task_args)
-  local command = build_task_command(task_args)
+local function execute_task_command(task_args, workspace_override)
+  local command = build_task_command(task_args, workspace_override)
   local output = vim.fn.system(command)
   local exit_code = vim.v.shell_error
 
@@ -350,24 +394,32 @@ function M.add_task_as_dependency()
       return
     end
 
+    -- Parse workspace from input (e.g., "@work Fix bug project:web")
+    local workspace_override, cleaned_input = parse_workspace_from_input(input)
+
+    -- Notify if workspace override is used
+    if workspace_override then
+      vim.notify(string.format("Creating dependency task in workspace: %s", workspace_override), vim.log.levels.INFO)
+    end
+
     -- Extract description and attributes
     -- User input format: "description project:X priority:H ..."
     -- We need to wrap the description in quotes
-    local first_space = input:find("%s")
+    local first_space = cleaned_input:find("%s")
     local description, attributes
 
     if first_space then
       -- Find where attributes start (project:, priority:, due:, etc.)
-      local attr_start = input:find("%w+:")
+      local attr_start = cleaned_input:find("%w+:")
       if attr_start then
-        description = input:sub(1, attr_start - 1):gsub("%s+$", "")
-        attributes = input:sub(attr_start)
+        description = cleaned_input:sub(1, attr_start - 1):gsub("%s+$", "")
+        attributes = cleaned_input:sub(attr_start)
       else
-        description = input
+        description = cleaned_input
         attributes = ""
       end
     else
-      description = input
+      description = cleaned_input
       attributes = ""
     end
 
@@ -375,7 +427,7 @@ function M.add_task_as_dependency()
     local escaped_desc = description:gsub("'", "'\\''")
 
     -- Create the new task
-    local add_cmd = build_task_command(string.format("add '%s' %s", escaped_desc, attributes))
+    local add_cmd = build_task_command(string.format("add '%s' %s", escaped_desc, attributes), workspace_override)
     vim.notify("Creating dependency task...", vim.log.levels.INFO)
 
     local add_output = vim.fn.system(add_cmd)
@@ -393,8 +445,8 @@ function M.add_task_as_dependency()
       return
     end
 
-    -- Get the UUID of the newly created task
-    local new_task_cmd = build_task_command(string.format("%s export", new_task_id))
+    -- Get the UUID of the newly created task (use same workspace)
+    local new_task_cmd = build_task_command(string.format("%s export", new_task_id), workspace_override)
     local new_task_json = vim.fn.system(new_task_cmd)
     if vim.v.shell_error ~= 0 then
       vim.notify("Failed to get new task UUID", vim.log.levels.ERROR)
@@ -690,8 +742,16 @@ function M.create_new_task()
         return
       end
 
+      -- Parse workspace from input (e.g., "@work Fix bug project:web")
+      local workspace_override, cleaned_input = parse_workspace_from_input(input)
+
+      -- Notify if workspace override is used
+      if workspace_override then
+        vim.notify(string.format("Creating task in workspace: %s", workspace_override), vim.log.levels.INFO)
+      end
+
       -- Create the task
-      local cmd = build_task_command(string.format("add %s", input))
+      local cmd = build_task_command(string.format("add %s", cleaned_input), workspace_override)
       local output = vim.fn.system(cmd)
       local exit_code = vim.v.shell_error
 

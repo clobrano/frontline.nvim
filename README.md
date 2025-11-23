@@ -83,6 +83,23 @@ require('frontline').setup({
 - If `default_workspace` is `nil`, the system's default Taskwarrior database is used
 - A notification displays the current workspace when opening a file
 - All task operations (create, modify, toggle, etc.) use the current workspace context
+- **Override workspace in task operations:** Include `@workspace` in task creation input to override the current buffer's workspace
+
+**Workspace Override Examples:**
+
+When creating a task, you can override the current workspace:
+```
+# In a buffer with @personal workspace
+# Press <leader>tn to create a new task
+
+# Create in current workspace (personal):
+New task: Fix bug in app project:mobile
+
+# Override to create in work workspace:
+New task: @work Review PR project:backend priority:H
+```
+
+This allows you to quickly create tasks in different workspaces without switching buffers.
 
 ### Task Format
 
