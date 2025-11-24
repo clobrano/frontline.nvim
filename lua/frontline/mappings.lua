@@ -398,7 +398,18 @@ function M.add_task_as_dependency()
 
   local task = tasks[1]
   local default_project = task.project or ""
-  local default_input = default_project ~= "" and string.format("project:%s ", default_project) or ""
+
+  -- Get current workspace to pre-fill
+  local current_workspace = require("frontline").get_current_workspace()
+
+  -- Build default input with workspace and project
+  local default_input = ""
+  if current_workspace then
+    default_input = string.format("@%s ", current_workspace)
+  end
+  if default_project ~= "" then
+    default_input = default_input .. string.format("project:%s ", default_project)
+  end
 
   -- Prompt user for new task description
   vim.ui.input({
@@ -694,15 +705,18 @@ local function get_project_from_task_line()
   return tasks[1].project
 end
 
--- Helper to extract project and tags from header filter (e.g., "# Tasks | project:myproj +tag1 +tag2")
+-- Helper to extract project, tags, and workspace from header filter (e.g., "# Tasks | @personal project:myproj +tag1 +tag2")
 local function get_context_from_header()
   local line = vim.api.nvim_get_current_line()
 
   -- Match header with filter: # Header | filter
   local filter = string.match(line, "^#+ .* | (.+)$")
   if not filter then
-    return nil, nil
+    return nil, nil, nil
   end
+
+  -- Extract workspace from filter (e.g., @personal, @work)
+  local workspace = string.match(filter, "@([%w_%-]+)")
 
   -- Extract project from filter (project:name or proj:name)
   local project = string.match(filter, "proj[ect]*:([%w%.%-_]+)")
@@ -717,7 +731,7 @@ local function get_context_from_header()
     end
   end
 
-  return project, (#tags > 0 and tags or nil)
+  return project, (#tags > 0 and tags or nil), workspace
 end
 
 -- Create a new task with smart pre-fill based on context
@@ -728,12 +742,22 @@ function M.create_new_task()
   -- First, check if cursor is on a task line
   local project_from_task = get_project_from_task_line()
   if project_from_task then
-    prefill = string.format("project:%s ", project_from_task)
+    -- Get current workspace when creating from a task line
+    local current_workspace = require("frontline").get_current_workspace()
+    if current_workspace then
+      prefill = string.format("@%s project:%s ", current_workspace, project_from_task)
+    else
+      prefill = string.format("project:%s ", project_from_task)
+    end
   else
-    -- Check if cursor is on a header with project and/or tags filter
-    local project_from_header, tags_from_header = get_context_from_header()
-    if project_from_header or tags_from_header then
+    -- Check if cursor is on a header with project, tags, and/or workspace filter
+    local project_from_header, tags_from_header, workspace_from_header = get_context_from_header()
+    if project_from_header or tags_from_header or workspace_from_header then
       local parts = {}
+
+      if workspace_from_header then
+        table.insert(parts, string.format("@%s", workspace_from_header))
+      end
 
       if project_from_header then
         table.insert(parts, string.format("project:%s", project_from_header))
