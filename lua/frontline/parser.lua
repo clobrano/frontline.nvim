@@ -16,10 +16,19 @@ function M.extract_queries(lines)
       local header_text = header_match
       local query_string = string.match(line, "|%s*(.+)")
       if query_string then
+        -- Extract workspace from query (e.g., @personal, @work)
+        local workspace = string.match(query_string, "@([%w_%-]+)")
+
+        -- Remove workspace from query string (so it doesn't get passed to taskwarrior)
+        local cleaned_query = string.gsub(query_string, "%s*@[%w_%-]+%s*", " ")
+        cleaned_query = string.gsub(cleaned_query, "^%s+", "") -- trim leading spaces
+        cleaned_query = string.gsub(cleaned_query, "%s+$", "") -- trim trailing spaces
+
         table.insert(queries, {
           line_num = i,
           header = header_text,
-          query = query_string,
+          query = cleaned_query,
+          workspace = workspace,
         })
       end
     end

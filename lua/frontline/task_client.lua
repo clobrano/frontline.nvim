@@ -9,11 +9,20 @@ local function _run_shell_command(cmd)
 end
 
 -- Function to execute a Taskwarrior query and return JSON output
-function M.execute_query(query_string)
+-- workspace_rc: optional path to a taskwarrior rc file for workspace-specific queries
+function M.execute_query(query_string, workspace_rc)
   -- Escape single quotes in the query by replacing ' with '\''
   local escaped_query = string.gsub(query_string, "'", "'\\''")
-  -- Wrap the query in single quotes to prevent shell interpretation
-  local cmd = string.format("task '%s' export", escaped_query)
+
+  -- Build command with optional rc file
+  local cmd
+  if workspace_rc and workspace_rc ~= "" then
+    local escaped_rc = string.gsub(workspace_rc, "'", "'\\''")
+    cmd = string.format("task rc:'%s' '%s' export", escaped_rc, escaped_query)
+  else
+    cmd = string.format("task '%s' export", escaped_query)
+  end
+
   local stdout, exit_code = _run_shell_command(cmd)
 
   if exit_code ~= 0 then
@@ -22,10 +31,18 @@ function M.execute_query(query_string)
       exit_code, cmd, stdout)
   end
 
-  local ok, parsed_json = pcall(vim.fn.json_decode, stdout)
+  -- Filter out Taskwarrior informational messages (e.g., "TASKRC override: ...")
+  -- These messages appear before the JSON output when using rc: override
+  local cleaned_stdout = stdout
+  if workspace_rc then
+    -- Remove lines starting with "TASKRC override:"
+    cleaned_stdout = string.gsub(stdout, "^TASKRC override:.-\n", "")
+  end
+
+  local ok, parsed_json = pcall(vim.fn.json_decode, cleaned_stdout)
   if not ok then
     return nil, string.format("Failed to parse Taskwarrior JSON output\nCommand: %s\nError: %s\nOutput preview: %s",
-      cmd, parsed_json, string.sub(stdout, 1, 200))
+      cmd, parsed_json, string.sub(cleaned_stdout, 1, 200))
   end
 
   return parsed_json
