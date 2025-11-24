@@ -90,6 +90,17 @@ local function build_task_command(task_args, workspace_override)
   end
 end
 
+-- Helper function to filter Taskwarrior informational messages from output
+local function filter_taskwarrior_messages(output, workspace_override)
+  -- When using rc: override, Taskwarrior outputs "TASKRC override: ..." before JSON
+  local workspace_rc = get_workspace_rc_with_override(workspace_override)
+  if workspace_rc and workspace_rc ~= "" then
+    -- Remove lines starting with "TASKRC override:"
+    return string.gsub(output, "^TASKRC override:.-\n", "")
+  end
+  return output
+end
+
 -- Execute a task command and return success status
 local function execute_task_command(task_args, workspace_override)
   local command = build_task_command(task_args, workspace_override)
@@ -116,6 +127,7 @@ local function get_incomplete_dependencies(task)
     -- Query the dependency task
     local cmd = build_task_command(string.format("%s export", dep_uuid))
     local dep_json = vim.fn.system(cmd)
+    dep_json = filter_taskwarrior_messages(dep_json, nil)
     if vim.v.shell_error == 0 then
       local success, dep_tasks = pcall(vim.fn.json_decode, dep_json)
       if success and dep_tasks and #dep_tasks > 0 then
@@ -161,6 +173,7 @@ function M.toggle_done()
   -- Get current task status to determine action
   local cmd = build_task_command(string.format("%s export", hash))
   local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, nil)
   local exit_code = vim.v.shell_error
 
   if exit_code ~= 0 then
@@ -279,6 +292,7 @@ function M.show_blocking_dependencies()
   -- Get task information
   local cmd = build_task_command(string.format("%s export", hash))
   local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, nil)
   local exit_code = vim.v.shell_error
 
   if exit_code ~= 0 then
@@ -306,6 +320,7 @@ function M.show_blocking_dependencies()
   for _, dep_uuid in ipairs(task.depends) do
     local dep_cmd = build_task_command(string.format("%s export", dep_uuid))
     local dep_json = vim.fn.system(dep_cmd)
+    dep_json = filter_taskwarrior_messages(dep_json, nil)
     if vim.v.shell_error == 0 then
       local dep_success, dep_tasks = pcall(vim.fn.json_decode, dep_json)
       if dep_success and dep_tasks and #dep_tasks > 0 then
@@ -366,6 +381,7 @@ function M.add_task_as_dependency()
   -- Get current task information
   local cmd = build_task_command(string.format("%s export", hash))
   local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, nil)
   local exit_code = vim.v.shell_error
 
   if exit_code ~= 0 then
@@ -448,6 +464,7 @@ function M.add_task_as_dependency()
     -- Get the UUID of the newly created task (use same workspace)
     local new_task_cmd = build_task_command(string.format("%s export", new_task_id), workspace_override)
     local new_task_json = vim.fn.system(new_task_cmd)
+    new_task_json = filter_taskwarrior_messages(new_task_json, workspace_override)
     if vim.v.shell_error ~= 0 then
       vim.notify("Failed to get new task UUID", vim.log.levels.ERROR)
       return
@@ -481,6 +498,7 @@ function M.toggle_started()
   -- Get current task status to determine action
   local cmd = build_task_command(string.format("%s export", hash))
   local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, nil)
   local exit_code = vim.v.shell_error
 
   if exit_code ~= 0 then
@@ -663,6 +681,7 @@ local function get_project_from_task_line()
   -- Get task details
   local cmd = build_task_command(string.format("%s export", hash))
   local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, nil)
   if vim.v.shell_error ~= 0 then
     return nil
   end
