@@ -398,7 +398,18 @@ function M.add_task_as_dependency()
 
   local task = tasks[1]
   local default_project = task.project or ""
-  local default_input = default_project ~= "" and string.format("project:%s ", default_project) or ""
+
+  -- Get current workspace to pre-fill
+  local current_workspace = require("frontline").get_current_workspace()
+
+  -- Build default input with workspace and project
+  local default_input = ""
+  if current_workspace then
+    default_input = string.format("@%s ", current_workspace)
+  end
+  if default_project ~= "" then
+    default_input = default_input .. string.format("project:%s ", default_project)
+  end
 
   -- Prompt user for new task description
   vim.ui.input({
@@ -712,7 +723,8 @@ local function get_context_from_task_line()
   }
 end
 
--- Helper to extract project, tags, and dates from header filter (e.g., "# Tasks | project:myproj +tag1 +tag2 due:2026-01-01")
+-- Helper to extract project, tags, workspace, and dates from header filter
+-- (e.g., "# Tasks | @personal project:myproj +tag1 +tag2 due:2026-01-01")
 local function get_context_from_header()
   local line = vim.api.nvim_get_current_line()
 
@@ -721,6 +733,9 @@ local function get_context_from_header()
   if not filter then
     return nil
   end
+
+  -- Extract workspace from filter (e.g., @personal, @work)
+  local workspace = string.match(filter, "@([%w_%-]+)")
 
   -- Extract project from filter (project:name or proj:name)
   local project = string.match(filter, "proj[ect]*:([%w%.%-_]+)")
@@ -752,6 +767,7 @@ local function get_context_from_header()
   return {
     project = project,
     tags = (#tags > 0 and tags or nil),
+    workspace = workspace,
     due = due,
     scheduled = scheduled
   }
@@ -767,6 +783,12 @@ function M.create_new_task()
   if context_from_task then
     local parts = {}
 
+    -- Get current workspace when creating from a task line
+    local current_workspace = require("frontline").get_current_workspace()
+    if current_workspace then
+      table.insert(parts, string.format("@%s", current_workspace))
+    end
+
     if context_from_task.project then
       table.insert(parts, string.format("project:%s", context_from_task.project))
     end
@@ -781,10 +803,14 @@ function M.create_new_task()
 
     prefill = table.concat(parts, " ") .. " "
   else
-    -- Check if cursor is on a header with project, tags, and/or date filters
+    -- Check if cursor is on a header with project, tags, workspace, and/or date filters
     local context_from_header = get_context_from_header()
     if context_from_header then
       local parts = {}
+
+      if context_from_header.workspace then
+        table.insert(parts, string.format("@%s", context_from_header.workspace))
+      end
 
       if context_from_header.project then
         table.insert(parts, string.format("project:%s", context_from_header.project))
