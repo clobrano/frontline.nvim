@@ -116,7 +116,7 @@ local function execute_task_command(task_args, workspace_override)
 end
 
 -- Helper to check if a task has incomplete dependencies
-local function get_incomplete_dependencies(task)
+local function get_incomplete_dependencies(task, workspace_override)
   if not task.depends or #task.depends == 0 then
     return nil
   end
@@ -125,9 +125,9 @@ local function get_incomplete_dependencies(task)
 
   for _, dep_uuid in ipairs(task.depends) do
     -- Query the dependency task
-    local cmd = build_task_command(string.format("%s export", dep_uuid))
+    local cmd = build_task_command(string.format("%s export", dep_uuid), workspace_override)
     local dep_json = vim.fn.system(cmd)
-    dep_json = filter_taskwarrior_messages(dep_json, nil)
+    dep_json = filter_taskwarrior_messages(dep_json, workspace_override)
     if vim.v.shell_error == 0 then
       local success, dep_tasks = pcall(vim.fn.json_decode, dep_json)
       if success and dep_tasks and #dep_tasks > 0 then
@@ -151,11 +151,11 @@ local function get_incomplete_dependencies(task)
 end
 
 -- Helper to mark multiple tasks as done
-local function mark_tasks_done(task_uuids)
+local function mark_tasks_done(task_uuids, workspace_override)
   local failed = {}
 
   for _, uuid in ipairs(task_uuids) do
-    if not execute_task_command(string.format("%s done", uuid)) then
+    if not execute_task_command(string.format("%s done", uuid), workspace_override) then
       table.insert(failed, string.sub(uuid, 1, 8))
     end
   end
@@ -170,10 +170,13 @@ function M.toggle_done()
     return
   end
 
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+
   -- Get current task status to determine action
-  local cmd = build_task_command(string.format("%s export", hash))
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
   local task_json = vim.fn.system(cmd)
-  task_json = filter_taskwarrior_messages(task_json, nil)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
   local exit_code = vim.v.shell_error
 
   if exit_code ~= 0 then
@@ -194,12 +197,12 @@ function M.toggle_done()
     -- Reopen the task
     vim.notify("Reopening task...", vim.log.levels.INFO)
 
-    if execute_task_command(string.format("%s modify status:pending", hash)) then
+    if execute_task_command(string.format("%s modify status:pending", hash), workspace) then
       require("frontline").refresh_current_buffer()
     end
   else
     -- Check for incomplete dependencies before marking as done
-    local incomplete_deps = get_incomplete_dependencies(task)
+    local incomplete_deps = get_incomplete_dependencies(task, workspace)
 
     if incomplete_deps then
       -- Build dependency list for display
@@ -247,7 +250,7 @@ function M.toggle_done()
             end
             table.insert(all_uuids, task.uuid)
 
-            local failed = mark_tasks_done(all_uuids)
+            local failed = mark_tasks_done(all_uuids, workspace)
 
             if #failed > 0 then
               vim.notify(
@@ -263,8 +266,7 @@ function M.toggle_done()
             -- Mark task done, ignore dependencies
             vim.notify("Marking task as done (ignoring dependencies)...", vim.log.levels.INFO)
 
-            local command = string.format("task %s done", hash)
-            if execute_task_command(command) then
+            if execute_task_command(string.format("%s done", hash), workspace) then
               require("frontline").refresh_current_buffer()
             end
           end
@@ -272,10 +274,9 @@ function M.toggle_done()
       )
     else
       -- No incomplete dependencies, mark as done normally
-      local command = string.format("task %s done", hash)
       vim.notify("Marking task as done...", vim.log.levels.INFO)
 
-      if execute_task_command(command) then
+      if execute_task_command(string.format("%s done", hash), workspace) then
         require("frontline").refresh_current_buffer()
       end
     end
@@ -289,10 +290,13 @@ function M.show_blocking_dependencies()
     return
   end
 
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+
   -- Get task information
-  local cmd = build_task_command(string.format("%s export", hash))
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
   local task_json = vim.fn.system(cmd)
-  task_json = filter_taskwarrior_messages(task_json, nil)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
   local exit_code = vim.v.shell_error
 
   if exit_code ~= 0 then
@@ -318,9 +322,9 @@ function M.show_blocking_dependencies()
   -- Get all dependencies (both complete and incomplete)
   local deps_info = {}
   for _, dep_uuid in ipairs(task.depends) do
-    local dep_cmd = build_task_command(string.format("%s export", dep_uuid))
+    local dep_cmd = build_task_command(string.format("%s export", dep_uuid), workspace)
     local dep_json = vim.fn.system(dep_cmd)
-    dep_json = filter_taskwarrior_messages(dep_json, nil)
+    dep_json = filter_taskwarrior_messages(dep_json, workspace)
     if vim.v.shell_error == 0 then
       local dep_success, dep_tasks = pcall(vim.fn.json_decode, dep_json)
       if dep_success and dep_tasks and #dep_tasks > 0 then
@@ -378,10 +382,13 @@ function M.add_task_as_dependency()
     return
   end
 
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+
   -- Get current task information
-  local cmd = build_task_command(string.format("%s export", hash))
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
   local task_json = vim.fn.system(cmd)
-  task_json = filter_taskwarrior_messages(task_json, nil)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
   local exit_code = vim.v.shell_error
 
   if exit_code ~= 0 then
@@ -492,7 +499,7 @@ function M.add_task_as_dependency()
     -- Add the new task as a dependency to the original task
     vim.notify("Adding dependency...", vim.log.levels.INFO)
 
-    if execute_task_command(string.format("%s modify depends:%s", hash, new_uuid)) then
+    if execute_task_command(string.format("%s modify depends:%s", hash, new_uuid), workspace) then
       vim.notify(string.format("Created task %s as dependency", new_task_id), vim.log.levels.INFO)
       require("frontline").refresh_current_buffer()
     end
@@ -506,10 +513,13 @@ function M.toggle_started()
     return
   end
 
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+
   -- Get current task status to determine action
-  local cmd = build_task_command(string.format("%s export", hash))
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
   local task_json = vim.fn.system(cmd)
-  task_json = filter_taskwarrior_messages(task_json, nil)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
   local exit_code = vim.v.shell_error
 
   if exit_code ~= 0 then
@@ -537,7 +547,7 @@ function M.toggle_started()
     vim.notify("Starting task...", vim.log.levels.INFO)
   end
 
-  if execute_task_command(task_args) then
+  if execute_task_command(task_args, workspace) then
     -- Refresh the buffer
     require("frontline").refresh_current_buffer()
   end
@@ -550,6 +560,9 @@ function M.modify_task()
     return
   end
 
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+
   -- Prompt user for modification string
   vim.ui.input({ prompt = "Modify task (e.g., 'priority:H due:tomorrow'): " }, function(input)
     if not input or input == "" then
@@ -559,7 +572,7 @@ function M.modify_task()
 
     vim.notify("Modifying task...", vim.log.levels.INFO)
 
-    if execute_task_command(string.format("%s modify %s", hash, input)) then
+    if execute_task_command(string.format("%s modify %s", hash, input), workspace) then
       -- Refresh the buffer
       require("frontline").refresh_current_buffer()
     end
@@ -573,6 +586,9 @@ function M.add_annotation()
     return
   end
 
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+
   -- Prompt user for annotation text
   vim.ui.input({ prompt = "Annotation text: " }, function(input)
     if not input or input == "" then
@@ -582,7 +598,7 @@ function M.add_annotation()
 
     vim.notify("Adding annotation...", vim.log.levels.INFO)
 
-    if execute_task_command(string.format("%s annotate '%s'", hash, input:gsub("'", "'\\'''"))) then
+    if execute_task_command(string.format("%s annotate '%s'", hash, input:gsub("'", "'\\'''")), workspace) then
       -- Refresh the buffer
       require("frontline").refresh_current_buffer()
     end
@@ -595,6 +611,9 @@ function M.edit_task()
   if not hash then
     return
   end
+
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
 
   -- Save current Neovim state
   vim.cmd("write")
@@ -611,7 +630,7 @@ function M.edit_task()
   vim.api.nvim_win_set_buf(0, bufnr)
 
   -- Start terminal with task edit command
-  local edit_cmd = build_task_command(string.format("%s edit", hash))
+  local edit_cmd = build_task_command(string.format("%s edit", hash), workspace)
   local term_job = vim.fn.termopen(edit_cmd, {
     on_exit = function(_, exit_code, _)
       if exit_code == 0 then
@@ -702,10 +721,13 @@ local function get_context_from_task_line()
     return nil
   end
 
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+
   -- Get task details
-  local cmd = build_task_command(string.format("%s export", hash))
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
   local task_json = vim.fn.system(cmd)
-  task_json = filter_taskwarrior_messages(task_json, nil)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
   if vim.v.shell_error ~= 0 then
     return nil
   end
