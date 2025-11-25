@@ -671,8 +671,21 @@ function M.undo_task()
   )
 end
 
--- Helper to extract project from a task on the current line
-local function get_project_from_task_line()
+-- Helper to convert ISO date to YYYY-MM-DD format for taskwarrior input
+local function format_date_for_input(iso_date)
+  if not iso_date or iso_date == "" then
+    return nil
+  end
+  -- ISO format from taskwarrior: 20251225T103000Z
+  -- Extract YYYY-MM-DD
+  local year = string.sub(iso_date, 1, 4)
+  local month = string.sub(iso_date, 5, 6)
+  local day = string.sub(iso_date, 7, 8)
+  return string.format("%s-%s-%s", year, month, day)
+end
+
+-- Helper to extract context from a task on the current line
+local function get_context_from_task_line()
   local hash = M.get_task_hash_under_cursor()
   if not hash then
     return nil
@@ -691,17 +704,22 @@ local function get_project_from_task_line()
     return nil
   end
 
-  return tasks[1].project
+  local task = tasks[1]
+  return {
+    project = task.project,
+    due = format_date_for_input(task.due),
+    scheduled = format_date_for_input(task.scheduled)
+  }
 end
 
--- Helper to extract project and tags from header filter (e.g., "# Tasks | project:myproj +tag1 +tag2")
+-- Helper to extract project, tags, and dates from header filter (e.g., "# Tasks | project:myproj +tag1 +tag2 due:2026-01-01")
 local function get_context_from_header()
   local line = vim.api.nvim_get_current_line()
 
   -- Match header with filter: # Header | filter
   local filter = string.match(line, "^#+ .* | (.+)$")
   if not filter then
-    return nil, nil
+    return nil
   end
 
   -- Extract project from filter (project:name or proj:name)
@@ -717,7 +735,26 @@ local function get_context_from_header()
     end
   end
 
-  return project, (#tags > 0 and tags or nil)
+  -- Extract due date if it's specific (not a modifier like due.before, due.after)
+  -- Only match "due:VALUE" where it's not preceded by a dot (not due.something:)
+  local due = nil
+  if not string.match(filter, "due%.") then
+    due = string.match(filter, "due:([^%s]+)")
+  end
+
+  -- Extract scheduled date if it's specific (not a modifier like scheduled.before, scheduled.after)
+  -- Match both "scheduled:" and "schedule:" (taskwarrior accepts both)
+  local scheduled = nil
+  if not string.match(filter, "schedul[ed]*%.") then
+    scheduled = string.match(filter, "schedul[ed]*:([^%s]+)")
+  end
+
+  return {
+    project = project,
+    tags = (#tags > 0 and tags or nil),
+    due = due,
+    scheduled = scheduled
+  }
 end
 
 -- Create a new task with smart pre-fill based on context
@@ -726,23 +763,45 @@ function M.create_new_task()
   local prefill = ""
 
   -- First, check if cursor is on a task line
-  local project_from_task = get_project_from_task_line()
-  if project_from_task then
-    prefill = string.format("project:%s ", project_from_task)
+  local context_from_task = get_context_from_task_line()
+  if context_from_task then
+    local parts = {}
+
+    if context_from_task.project then
+      table.insert(parts, string.format("project:%s", context_from_task.project))
+    end
+
+    if context_from_task.due then
+      table.insert(parts, string.format("due:%s", context_from_task.due))
+    end
+
+    if context_from_task.scheduled then
+      table.insert(parts, string.format("scheduled:%s", context_from_task.scheduled))
+    end
+
+    prefill = table.concat(parts, " ") .. " "
   else
-    -- Check if cursor is on a header with project and/or tags filter
-    local project_from_header, tags_from_header = get_context_from_header()
-    if project_from_header or tags_from_header then
+    -- Check if cursor is on a header with project, tags, and/or date filters
+    local context_from_header = get_context_from_header()
+    if context_from_header then
       local parts = {}
 
-      if project_from_header then
-        table.insert(parts, string.format("project:%s", project_from_header))
+      if context_from_header.project then
+        table.insert(parts, string.format("project:%s", context_from_header.project))
       end
 
-      if tags_from_header then
-        for _, tag in ipairs(tags_from_header) do
+      if context_from_header.tags then
+        for _, tag in ipairs(context_from_header.tags) do
           table.insert(parts, string.format("+%s", tag))
         end
+      end
+
+      if context_from_header.due then
+        table.insert(parts, string.format("due:%s", context_from_header.due))
+      end
+
+      if context_from_header.scheduled then
+        table.insert(parts, string.format("scheduled:%s", context_from_header.scheduled))
       end
 
       prefill = table.concat(parts, " ") .. " "
