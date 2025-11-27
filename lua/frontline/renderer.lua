@@ -107,6 +107,12 @@ local function get_extra_icons(task)
   if task.depends and #task.depends > 0 then
     table.insert(icons, "🔒")
   end
+
+  -- For reverse dependencies, check if this task is blocking others
+  if task._reverse_deps and #task._reverse_deps > 0 then
+    table.insert(icons, "⚓")
+  end
+
   -- For annotations, Taskwarrior 'export' includes an 'annotations' field as a table
   if task.annotations and #task.annotations > 0 then
     table.insert(icons, "A")

@@ -15,6 +15,8 @@ local config = {
     -- work = "~/.config/taskwarrior/work/.taskrc",
   },
   default_workspace = nil, -- Name of the default workspace (uses system taskwarrior if nil)
+  enable_reverse_dependencies = true, -- Enable reverse dependency tracking (anchor icon and "tasks this task is blocking" view)
+  reverse_dependencies_warn_threshold = 1000, -- Warn if reverse dependency queries take longer than this (in milliseconds)
   mappings = {
     toggle_done = "<leader>td",
     toggle_started = "<leader>ts",
@@ -115,6 +117,36 @@ local function refresh_tasks()
       return
     end
 
+    -- Fetch reverse dependencies for each task (if enabled)
+    if config.enable_reverse_dependencies then
+      local start_time = vim.loop.hrtime()
+
+      for _, task in ipairs(tasks) do
+        local reverse_deps, rev_err = task_client.get_reverse_dependencies(task.uuid)
+        if not rev_err and reverse_deps then
+          task._reverse_deps = reverse_deps
+        else
+          task._reverse_deps = {}
+        end
+      end
+
+      local elapsed_ms = (vim.loop.hrtime() - start_time) / 1000000
+      if elapsed_ms > config.reverse_dependencies_warn_threshold then
+        vim.notify(
+          string.format(
+            "Reverse dependency queries took %.0fms. Consider disabling with enable_reverse_dependencies=false in setup().",
+            elapsed_ms
+          ),
+          vim.log.levels.WARN
+        )
+      end
+    else
+      -- Set empty reverse deps if feature is disabled
+      for _, task in ipairs(tasks) do
+        task._reverse_deps = {}
+      end
+    end
+
     local formatted_tasks = {}
     for _, task in ipairs(tasks) do
       table.insert(formatted_tasks, renderer.format_task(task, config.convert_dates_to_local))
@@ -159,6 +191,9 @@ function M.setup(opts)
 
   -- Merge user config with defaults
   config = vim.tbl_deep_extend("force", config, opts)
+
+  -- Pass config to mappings module
+  mappings.set_config(config)
 
   -- Autocommands for refreshing task lists
   vim.api.nvim_create_autocmd({"BufReadPost", "BufWritePost"}, {

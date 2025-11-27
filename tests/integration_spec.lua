@@ -15,8 +15,8 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
     original_run_shell_command = task_client._run_shell_command
     -- Load the plugin *after* mocks are set up
     plugin = require("frontline")
-    -- Setup the plugin with mocks in place
-    plugin.setup()
+    -- Setup the plugin with mocks in place (enable reverse dependencies for tests)
+    plugin.setup({ enable_reverse_dependencies = true })
   end)
 
   after_each(function()
@@ -40,8 +40,13 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
 
     local mock_task_output = '[{"id":1,"description":"New Task 1","status":"pending","uuid":"aaaa1111bbbb2222"}]'
     task_client._set_run_shell_command_mock(function(cmd)
-      assert.truthy(string.find(cmd, "task 'status:pending' export"))
-      return mock_task_output, 0
+      if string.find(cmd, "task 'status:pending' export") then
+        return mock_task_output, 0
+      elseif string.find(cmd, "depends.any:") then
+        -- No reverse dependencies
+        return '[]', 0
+      end
+      return '[]', 0
     end)
 
     test_utils.trigger_autocmd("BufReadPost", 0)
@@ -68,8 +73,12 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
 
     local mock_task_output = '[{"id":2,"description":"Updated Task 2","status":"pending","uuid":"dddd4444eeee5555"}]'
     task_client._set_run_shell_command_mock(function(cmd)
-      assert.truthy(string.find(cmd, "task 'status:pending' export"))
-      return mock_task_output, 0
+      if string.find(cmd, "task 'status:pending' export") then
+        return mock_task_output, 0
+      elseif string.find(cmd, "depends.any:") then
+        return '[]', 0
+      end
+      return '[]', 0
     end)
 
     test_utils.trigger_autocmd("BufWritePost", 0)
@@ -96,8 +105,12 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
 
     local mock_task_output = '[{"id":3,"description":"Waiting Task","status":"pending","uuid":"ffff6666gggg7777"}]'
     task_client._set_run_shell_command_mock(function(cmd)
-      assert.truthy(string.find(cmd, "task 'status:waiting' export"))
-      return mock_task_output, 0
+      if string.find(cmd, "task 'status:waiting' export") then
+        return mock_task_output, 0
+      elseif string.find(cmd, "depends.any:") then
+        return '[]', 0
+      end
+      return '[]', 0
     end)
 
     test_utils.execute_user_command("FrontlineRefresh")
@@ -148,6 +161,8 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
         return '[{"id":1,"description":"Work Task 1","status":"pending","uuid":"work1111work2222"}]' , 0
       elseif string.find(cmd, "project:personal") then
         return '[{"id":2,"description":"Personal Task 1","status":"pending","uuid":"pers3333pers4444"}]' , 0
+      elseif string.find(cmd, "depends.any:") then
+        return '[]', 0
       end
       return "[]", 0
     end)
@@ -165,6 +180,92 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
       "",
     }
     assert.are.same(expected_content, test_utils.mock_buffer_content)
-    assert.are.same(2, call_count)
+    -- Now we expect 4 calls: 2 main queries + 2 reverse dependency queries
+    assert.are.same(4, call_count)
+  end)
+
+  it("should fetch and display reverse dependencies with anchor icon during refresh", function()
+    -- Mock buffer with task query
+    test_utils.set_mock_buffer_content({
+      "# My Tasks | status:pending",
+      ""
+    })
+
+    -- Track which commands are called
+    local main_query_called = false
+    local reverse_dep_called = false
+
+    task_client._set_run_shell_command_mock(function(cmd)
+      if string.find(cmd, "status:pending") then
+        main_query_called = true
+        -- Return task with dependencies that will trigger reverse dep query
+        return '[{"uuid":"task1uuid","description":"Main task","status":"pending"}]', 0
+      elseif string.find(cmd, "depends.any:task1uuid") then
+        reverse_dep_called = true
+        -- Return a task that depends on task1 (must include depends field!)
+        return '[{"uuid":"blocked1uuid","description":"Blocked task","status":"pending","depends":["task1uuid"]}]', 0
+      end
+      return '[]', 0
+    end)
+
+    plugin.refresh_current_buffer()
+
+    -- Verify reverse dependency was queried
+    assert.is_true(main_query_called, "Main query should be called")
+    assert.is_true(reverse_dep_called, "Reverse dependency query should be called")
+
+    -- Verify rendered output includes anchor icon
+    local buffer_lines = test_utils.mock_buffer_content
+    assert.truthy(string.find(buffer_lines[2], "⚓"), "Output should contain anchor icon")
+    assert.truthy(string.find(buffer_lines[2], "Main task"), "Output should contain task description")
+  end)
+
+  it("should not show anchor icon when task has no reverse dependencies", function()
+    test_utils.set_mock_buffer_content({
+      "# My Tasks | status:pending",
+      ""
+    })
+
+    task_client._set_run_shell_command_mock(function(cmd)
+      if string.find(cmd, "status:pending") then
+        return '[{"uuid":"task2uuid","description":"Standalone task","status":"pending"}]', 0
+      elseif string.find(cmd, "depends.any:task2uuid") then
+        -- No tasks depend on this one
+        return '[]', 0
+      end
+      return '[]', 0
+    end)
+
+    plugin.refresh_current_buffer()
+
+    local buffer_lines = test_utils.mock_buffer_content
+    assert.is_falsy(string.find(buffer_lines[2], "⚓"), "Output should not contain anchor icon")
+    assert.truthy(string.find(buffer_lines[2], "Standalone task"), "Output should contain task description")
+  end)
+
+  it("should show both lock and anchor icons when task has both dependency types", function()
+    test_utils.set_mock_buffer_content({
+      "# My Tasks | status:pending",
+      ""
+    })
+
+    task_client._set_run_shell_command_mock(function(cmd)
+      if string.find(cmd, "status:pending") then
+        -- Return task with both dependencies (depends) and reverse dependencies (blocking others)
+        return '[{"uuid":"task3uuid","description":"Complex task","status":"pending","depends":["dep1uuid"]}]', 0
+      elseif string.find(cmd, "depends.any:task3uuid") then
+        -- This task blocks another task (must include depends field!)
+        return '[{"uuid":"blocked2uuid","description":"Blocked by complex","status":"pending","depends":["task3uuid"]}]', 0
+      end
+      return '[]', 0
+    end)
+
+    plugin.refresh_current_buffer()
+
+    local buffer_lines = test_utils.mock_buffer_content
+    -- Should contain both lock and anchor icons
+    assert.truthy(string.find(buffer_lines[2], "🔒"), "Output should contain lock icon")
+    assert.truthy(string.find(buffer_lines[2], "⚓"), "Output should contain anchor icon")
+    assert.truthy(string.find(buffer_lines[2], "Complex task"), "Output should contain task description")
   end)
 end)

@@ -48,6 +48,40 @@ function M.execute_query(query_string, workspace_rc)
   return parsed_json
 end
 
+-- Function to get reverse dependencies (tasks that depend on this task)
+function M.get_reverse_dependencies(task_uuid)
+  -- Query all tasks with dependencies
+  -- Note: depends.any: uses substring matching, so we need to filter results
+  local query = string.format("depends.any:%s", task_uuid)
+  local cmd = string.format("task '%s' export", query)
+  local stdout, exit_code = _run_shell_command(cmd)
+
+  if exit_code ~= 0 then
+    return nil, string.format("Failed to query reverse dependencies (exit code %d)", exit_code)
+  end
+
+  local ok, parsed_json = pcall(vim.fn.json_decode, stdout)
+  if not ok then
+    return nil, string.format("Failed to parse reverse dependencies JSON: %s", parsed_json)
+  end
+
+  -- Filter to only tasks that actually depend on this exact UUID
+  -- (depends.any: does substring matching, which can give false positives)
+  local filtered_results = {}
+  for _, task in ipairs(parsed_json) do
+    if task.depends then
+      for _, dep_uuid in ipairs(task.depends) do
+        if dep_uuid == task_uuid then
+          table.insert(filtered_results, task)
+          break
+        end
+      end
+    end
+  end
+
+  return filtered_results
+end
+
 -- Expose for testing purposes
 function M._set_run_shell_command_mock(mock_func)
   _run_shell_command = mock_func

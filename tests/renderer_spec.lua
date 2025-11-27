@@ -260,6 +260,98 @@ describe("Renderer Module", function()
         assert.are.same(expected, renderer.format_task(task))
       end)
 
+      describe("Reverse dependencies (anchor icon)", function()
+        it("should show anchor icon for tasks blocking others", function()
+          local task = {
+            description = "Task blocking others",
+            status = "pending",
+            uuid = "blocking123456",
+            _reverse_deps = {
+              {uuid = "rev1", description = "Blocked task"}
+            }
+          }
+          local expected = "* [ ] Task blocking others [⚓] (blocking)"
+          assert.are.same(expected, renderer.format_task(task))
+        end)
+
+        it("should show both lock and anchor icons", function()
+          local task = {
+            description = "Task with both dependency types",
+            status = "pending",
+            uuid = "both1234567890",
+            depends = {"dep1"},
+            _reverse_deps = {
+              {uuid = "rev1", description = "Blocked task"}
+            }
+          }
+          local expected = "* [ ] Task with both dependency types [🔒,⚓] (both1234)"
+          assert.are.same(expected, renderer.format_task(task))
+        end)
+
+        it("should not show anchor icon when _reverse_deps is empty", function()
+          local task = {
+            description = "Task blocking nothing",
+            status = "pending",
+            uuid = "noblock123456",
+            _reverse_deps = {}
+          }
+          local expected = "* [ ] Task blocking nothing (noblock1)"
+          assert.are.same(expected, renderer.format_task(task))
+        end)
+
+        it("should not show anchor icon when _reverse_deps is nil", function()
+          local task = {
+            description = "Task blocking nothing",
+            status = "pending",
+            uuid = "noblock223456"
+          }
+          local expected = "* [ ] Task blocking nothing (noblock2)"
+          assert.are.same(expected, renderer.format_task(task))
+        end)
+
+        it("should show all icons in correct order", function()
+          local task = {
+            description = "Complete icon task",
+            status = "pending",
+            uuid = "allicons123456",
+            priority = "H",
+            depends = {"dep1"},
+            _reverse_deps = {{uuid = "rev1"}},
+            annotations = {{description = "note"}}
+          }
+          -- Order: priority, lock, anchor, annotations
+          local expected = "* [ ] Complete icon task [!!!,🔒,⚓,A] (allicons)"
+          assert.are.same(expected, renderer.format_task(task))
+        end)
+
+        it("should show anchor with priority but no lock", function()
+          local task = {
+            description = "Blocking task with priority",
+            status = "pending",
+            uuid = "blockingpriority",
+            priority = "M",
+            _reverse_deps = {{uuid = "rev1"}}
+          }
+          local expected = "* [ ] Blocking task with priority [!!,⚓] (blocking)"
+          assert.are.same(expected, renderer.format_task(task))
+        end)
+
+        it("should show multiple reverse dependencies still shows one anchor", function()
+          local task = {
+            description = "Blocking multiple tasks",
+            status = "pending",
+            uuid = "multipleblocker",
+            _reverse_deps = {
+              {uuid = "rev1", description = "Task 1"},
+              {uuid = "rev2", description = "Task 2"},
+              {uuid = "rev3", description = "Task 3"}
+            }
+          }
+          local expected = "* [ ] Blocking multiple tasks [⚓] (multiple)"
+          assert.are.same(expected, renderer.format_task(task))
+        end)
+      end)
+
       describe("Date conversion modes", function()
         it("should convert UTC to local when convert_to_local is true (default)", function()
           local task = {

@@ -80,4 +80,79 @@ describe("Task Client Module", function()
     assert.are.same(1, #tasks)
     assert.are.same("Complex Task", tasks[1].description)
   end)
+
+  describe("Reverse Dependencies", function()
+    it("should query reverse dependencies successfully", function()
+      -- Mock returns task that depends on test-uuid
+      local mock_json = '[{"uuid":"rev1","description":"Blocked task 1","status":"pending","depends":["test-uuid"]}]'
+      task_client._set_run_shell_command_mock(function(cmd)
+        assert.truthy(string.find(cmd, "depends.any:test%-uuid"))
+        return mock_json, 0
+      end)
+
+      local reverse_deps, err = task_client.get_reverse_dependencies("test-uuid")
+      assert.is_nil(err)
+      assert.are.same(1, #reverse_deps)
+      assert.are.same("rev1", reverse_deps[1].uuid)
+      assert.are.same("Blocked task 1", reverse_deps[1].description)
+    end)
+
+    it("should handle no reverse dependencies", function()
+      task_client._set_run_shell_command_mock(function(cmd)
+        return '[]', 0
+      end)
+
+      local reverse_deps, err = task_client.get_reverse_dependencies("test-uuid")
+      assert.is_nil(err)
+      assert.are.same(0, #reverse_deps)
+    end)
+
+    it("should handle reverse dependency query failure", function()
+      task_client._set_run_shell_command_mock(function(cmd)
+        return "Error: invalid UUID", 1
+      end)
+
+      local reverse_deps, err = task_client.get_reverse_dependencies("bad-uuid")
+      assert.is_nil(reverse_deps)
+      assert.truthy(string.find(err, "Failed to query reverse dependencies"))
+    end)
+
+    it("should handle invalid JSON in reverse dependency response", function()
+      task_client._set_run_shell_command_mock(function(cmd)
+        return "Not valid JSON", 0
+      end)
+
+      local reverse_deps, err = task_client.get_reverse_dependencies("test-uuid")
+      assert.is_nil(reverse_deps)
+      assert.truthy(string.find(err, "Failed to parse reverse dependencies JSON"))
+    end)
+
+    it("should return multiple reverse dependencies", function()
+      -- Mock returns multiple tasks that depend on test-uuid
+      local mock_json = '[{"uuid":"rev1","description":"Task 1","status":"pending","depends":["test-uuid"]},{"uuid":"rev2","description":"Task 2","status":"completed","depends":["test-uuid","other-uuid"]}]'
+      task_client._set_run_shell_command_mock(function(cmd)
+        return mock_json, 0
+      end)
+
+      local reverse_deps, err = task_client.get_reverse_dependencies("test-uuid")
+      assert.is_nil(err)
+      assert.are.same(2, #reverse_deps)
+      assert.are.same("rev1", reverse_deps[1].uuid)
+      assert.are.same("rev2", reverse_deps[2].uuid)
+    end)
+
+    it("should filter out false positives from substring matching", function()
+      -- Mock returns tasks with similar UUIDs but not exact match
+      local mock_json = '[{"uuid":"rev1","description":"Match","status":"pending","depends":["test-uuid"]},{"uuid":"rev2","description":"False positive","status":"pending","depends":["other-test-uuid-different"]}]'
+      task_client._set_run_shell_command_mock(function(cmd)
+        return mock_json, 0
+      end)
+
+      local reverse_deps, err = task_client.get_reverse_dependencies("test-uuid")
+      assert.is_nil(err)
+      assert.are.same(1, #reverse_deps)
+      assert.are.same("rev1", reverse_deps[1].uuid)
+      assert.are.same("Match", reverse_deps[1].description)
+    end)
+  end)
 end)
