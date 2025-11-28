@@ -365,6 +365,10 @@ function M.show_blocking_dependencies()
           short_hash = string.sub(dep_uuid, 1, 8),
           status = dep_task.status,
           is_blocking = dep_task.status ~= "completed"
+      })
+      end
+    end
+  end
   -- Get reverse dependencies (tasks this task is blocking) - only if enabled
   local reverse_deps = {}
   if config.enable_reverse_dependencies then
