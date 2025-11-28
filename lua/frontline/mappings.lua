@@ -1,5 +1,13 @@
 local M = {}
 
+-- Store reference to config (set by init.lua)
+local config = { enable_reverse_dependencies = true }
+
+-- Function to set config from init.lua
+function M.set_config(new_config)
+  config = new_config
+end
+
 -- Extract task hash from the current line
 -- Expected format: * [status] description ... (hash)
 function M.get_task_hash_under_cursor()
@@ -313,10 +321,32 @@ function M.show_blocking_dependencies()
 
   local task = tasks[1]
 
-  -- Check for dependencies
-  if not task.depends or #task.depends == 0 then
-    vim.notify("Task has no dependencies", vim.log.levels.INFO)
-    return
+  -- Get forward dependencies (tasks blocking this task)
+  local forward_deps = {}
+  local forward_blocking_count = 0
+
+  if task.depends and #task.depends > 0 then
+    for _, dep_uuid in ipairs(task.depends) do
+      local dep_cmd = build_task_command(string.format("%s export", dep_uuid))
+      local dep_json = vim.fn.system(dep_cmd)
+      dep_json = filter_taskwarrior_messages(dep_json, nil)
+      if vim.v.shell_error == 0 then
+        local dep_success, dep_tasks = pcall(vim.fn.json_decode, dep_json)
+        if dep_success and dep_tasks and #dep_tasks > 0 then
+          local dep_task = dep_tasks[1]
+          table.insert(forward_deps, {
+            uuid = dep_uuid,
+            description = dep_task.description or "Unknown task",
+            short_hash = string.sub(dep_uuid, 1, 8),
+            status = dep_task.status,
+            is_blocking = dep_task.status ~= "completed"
+          })
+          if dep_task.status ~= "completed" then
+            forward_blocking_count = forward_blocking_count + 1
+          end
+        end
+      end
+    end
   end
 
   -- Get all dependencies (both complete and incomplete)
@@ -335,41 +365,75 @@ function M.show_blocking_dependencies()
           short_hash = string.sub(dep_uuid, 1, 8),
           status = dep_task.status,
           is_blocking = dep_task.status ~= "completed"
+  -- Get reverse dependencies (tasks this task is blocking) - only if enabled
+  local reverse_deps = {}
+  if config.enable_reverse_dependencies then
+    local task_client = require("frontline.task_client")
+    local reverse_deps_tasks, rev_err = task_client.get_reverse_dependencies(task.uuid)
+
+    if not rev_err and reverse_deps_tasks then
+      for _, rev_task in ipairs(reverse_deps_tasks) do
+        table.insert(reverse_deps, {
+          uuid = rev_task.uuid,
+          description = rev_task.description or "Unknown task",
+          short_hash = string.sub(rev_task.uuid, 1, 8),
+          status = rev_task.status,
+          is_blocking = rev_task.status ~= "completed"
         })
       end
     end
   end
 
-  if #deps_info == 0 then
-    vim.notify("Could not retrieve dependency information", vim.log.levels.WARN)
+  -- Check if there are any dependencies to show
+  if #forward_deps == 0 and #reverse_deps == 0 then
+    local msg = config.enable_reverse_dependencies
+      and "Task has no dependencies (forward or reverse)"
+      or "Task has no dependencies"
+    vim.notify(msg, vim.log.levels.INFO)
     return
   end
 
-  -- Build dependency list with status
-  local dep_lines = {}
-  local blocking_count = 0
-  for _, dep in ipairs(deps_info) do
-    local status_indicator = dep.is_blocking and "[ ]" or "[x]"
-    local status_color = dep.is_blocking and "WarningMsg" or "Comment"
-    table.insert(dep_lines, {
-      string.format("  %s %s (%s)", status_indicator, dep.description, dep.short_hash),
-      status_color
+  -- Build display
+  local echo_chunks = {}
+
+  -- Forward dependencies section
+  if #forward_deps > 0 then
+    table.insert(echo_chunks, {
+      string.format("Tasks blocking this task (%d total, %d incomplete):\n",
+        #forward_deps, forward_blocking_count),
+      "Title"
     })
-    if dep.is_blocking then
-      blocking_count = blocking_count + 1
+
+    for _, dep in ipairs(forward_deps) do
+      local status_indicator = dep.is_blocking and "[ ]" or "[x]"
+      local status_color = dep.is_blocking and "WarningMsg" or "Comment"
+      table.insert(echo_chunks, {
+        string.format("  %s %s (%s)\n", status_indicator, dep.description, dep.short_hash),
+        status_color
+      })
+    end
+
+    -- Add blank line if we also have reverse deps
+    if #reverse_deps > 0 then
+      table.insert(echo_chunks, {"\n", "Normal"})
     end
   end
 
-  -- Display dependency information
-  local header_text = string.format(
-    "Task dependencies (%d total, %d blocking):\n",
-    #deps_info,
-    blocking_count
-  )
+  -- Reverse dependencies section
+  if #reverse_deps > 0 then
+    table.insert(echo_chunks, {
+      string.format("Tasks this task is blocking (%d total):\n", #reverse_deps),
+      "Title"
+    })
 
-  local echo_chunks = {{header_text, "Title"}}
-  for _, line_info in ipairs(dep_lines) do
-    table.insert(echo_chunks, {line_info[1] .. "\n", line_info[2]})
+    for _, dep in ipairs(reverse_deps) do
+      local status_indicator = dep.is_blocking and "[ ]" or "[x]"
+      local status_color = dep.is_blocking and "WarningMsg" or "Comment"
+      table.insert(echo_chunks, {
+        string.format("  %s %s (%s)\n", status_indicator, dep.description, dep.short_hash),
+        status_color
+      })
+    end
   end
 
   vim.api.nvim_echo(echo_chunks, true, {})

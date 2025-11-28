@@ -6,8 +6,8 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 
 - 📝 Embed Taskwarrior queries in Markdown headers
 - 🔄 Automatic task list updates on file open/save
-- ✅ Task status indicators: `[ ]` pending, `[S]` started, `[x]` completed
-- 🎯 Priority, dependency, and annotation icons
+- ✅ Task status indicators: `[ ]` pending, `[S]` started, `[x]` completed, `[-]` deleted
+- 🎯 Priority, dependency, reverse dependency, and annotation icons
 - ⚙️ Configurable blank lines after task lists
 - ⌨️ Interactive task management with keybindings
 - 🕐 Local timezone display for dates and times
@@ -117,11 +117,11 @@ Examples:
 ```
 
 Where:
-- `[status]`: `[ ]` pending, `[S]` started, `[x]` completed
+- `[status]`: `[ ]` pending, `[S]` started, `[x]` completed, `[-]` deleted
 - `description`: Task description from Taskwarrior
 - `(scheduled)`: Scheduled date in rounded parenthesis (if set)
 - `[due]`: Due date in squared brackets (if set)
-- `[icons]`: Priority (`!!!` high, `!!` medium, `!` low), Dependencies (🔒), Annotations (A)
+- `[icons]`: Priority (`!!!` high, `!!` medium, `!` low), Dependencies (🔒), Reverse Dependencies (⚓), Annotations (A)
 - `(hash)`: Short task UUID (first 8 characters)
 
 ### Automatic Refresh
@@ -178,12 +178,18 @@ require('frontline').setup({
     work = "~/.config/taskwarrior/work/.taskrc",
   },
   default_workspace = "personal",  -- Default workspace when none specified (nil = system taskwarrior)
+  enable_reverse_dependencies = true,  -- Show anchor icon for tasks blocking others (default: true)
+  reverse_dependencies_warn_threshold = 1000,  -- Warn if queries take > 1000ms (default: 1000)
   mappings = {
     toggle_done = "<leader>td",      -- Toggle task done/undone
     toggle_started = "<leader>ts",   -- Toggle task started/unstarted
     modify_task = "<leader>tm",      -- Modify task properties
     add_annotation = "<leader>ta",   -- Add task annotation
     edit_task = "<leader>te",        -- Edit task in Taskwarrior editor
+    show_blocking_dependencies = "<leader>tb",  -- Show dependencies
+    add_dependency = "<leader>tB",   -- Add task as dependency
+    undo_task = "<leader>tu",        -- Undo last action
+    create_task = "<leader>tn",      -- Create new task
   },
 })
 ```
@@ -195,11 +201,17 @@ require('frontline').setup({
 | `newlines_after_tasks` | number | 2 | Number of blank lines to add after each task list |
 | `workspaces` | table | `{}` | Map of workspace names to Taskwarrior rc file paths |
 | `default_workspace` | string | `nil` | Default workspace name (nil uses system taskwarrior) |
+| `enable_reverse_dependencies` | boolean | true | Enable reverse dependency tracking (⚓ icon and "tasks this task is blocking" view) |
+| `reverse_dependencies_warn_threshold` | number | 1000 | Warn if reverse dependency queries take longer than this (in milliseconds). Set to 0 to disable warnings. |
 | `mappings.toggle_done` | string | `"<leader>td"` | Keybinding to toggle task done/undone |
 | `mappings.toggle_started` | string | `"<leader>ts"` | Keybinding to toggle task started/unstarted |
 | `mappings.modify_task` | string | `"<leader>tm"` | Keybinding to modify task |
 | `mappings.add_annotation` | string | `"<leader>ta"` | Keybinding to add annotation |
 | `mappings.edit_task` | string | `"<leader>te"` | Keybinding to edit task in Taskwarrior editor |
+| `mappings.show_blocking_dependencies` | string | `"<leader>tb"` | Keybinding to show dependencies (forward and reverse) |
+| `mappings.add_dependency` | string | `"<leader>tB"` | Keybinding to add task as dependency |
+| `mappings.undo_task` | string | `"<leader>tu"` | Keybinding to undo last action |
+| `mappings.create_task` | string | `"<leader>tn"` | Keybinding to create new task |
 
 **Note:** Set any mapping to `false` to disable it:
 
