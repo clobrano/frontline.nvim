@@ -121,7 +121,7 @@ Where:
 - `description`: Task description from Taskwarrior
 - `(scheduled)`: Scheduled date in rounded parenthesis (if set)
 - `[due]`: Due date in squared brackets (if set)
-- `[icons]`: Priority (`!!!` high, `!!` medium, `!` low), Dependencies (🔒), Reverse Dependencies (⚓), Annotations (A)
+- `[icons]`: Priority (🔴 high, 🟠 medium, 🟡 low), Dependencies (🔒), Reverse Dependencies (⚓), Annotations (🗒️)
 - `(hash)`: Short task UUID (first 8 characters)
 
 ### Automatic Refresh
