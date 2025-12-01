@@ -92,14 +92,14 @@ end
 local function get_extra_icons(task)
   local icons = {}
 
-  -- Priority: !!! for High, !! for Medium, ! for Low
+  -- Priority: 🔴 for High, 🟠 for Medium, 🟡 for Low
   if task.priority then
     if task.priority == "H" then
-      table.insert(icons, "!!!")
+      table.insert(icons, "🔴")
     elseif task.priority == "M" then
-      table.insert(icons, "!!")
+      table.insert(icons, "🟠")
     elseif task.priority == "L" then
-      table.insert(icons, "!")
+      table.insert(icons, "🟡")
     end
   end
 
@@ -115,7 +115,7 @@ local function get_extra_icons(task)
 
   -- For annotations, Taskwarrior 'export' includes an 'annotations' field as a table
   if task.annotations and #task.annotations > 0 then
-    table.insert(icons, "A")
+    table.insert(icons, "🗒️")
   end
 
   if #icons > 0 then
