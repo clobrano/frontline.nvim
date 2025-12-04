@@ -218,7 +218,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "9999aaaabbbbcccc",
         }
-        local expected = "* [ ] All Icons Task [" .. convert_iso_to_local("20251111T090000Z") .. "] [🟠,🔒,🗒️] (9999aaaa)"
+        local expected = "* [ ] All Icons Task [" .. convert_iso_to_local("20251111T090000Z") .. "] [🟠🔒🗒️] (9999aaaa)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -234,7 +234,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "completecomplete",
         }
-        local expected = "* [ ] Complete Task (" .. convert_iso_to_local("20251110T080000Z") .. ") [" .. convert_iso_to_local("20251111T090000Z") .. "] [🔴,🔒,🗒️] (complete)"
+        local expected = "* [ ] Complete Task (" .. convert_iso_to_local("20251110T080000Z") .. ") [" .. convert_iso_to_local("20251111T090000Z") .. "] [🔴🔒🗒️] (complete)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -284,7 +284,7 @@ describe("Renderer Module", function()
               {uuid = "rev1", description = "Blocked task"}
             }
           }
-          local expected = "* [ ] Task with both dependency types [🔒,⚓] (both1234)"
+          local expected = "* [ ] Task with both dependency types [🔒⚓] (both1234)"
           assert.are.same(expected, renderer.format_task(task))
         end)
 
@@ -320,7 +320,7 @@ describe("Renderer Module", function()
             annotations = {{description = "note"}}
           }
           -- Order: priority, lock, anchor, annotations
-          local expected = "* [ ] Complete icon task [🔴,🔒,⚓,🗒️] (allicons)"
+          local expected = "* [ ] Complete icon task [🔴🔒⚓🗒️] (allicons)"
           assert.are.same(expected, renderer.format_task(task))
         end)
 
@@ -332,7 +332,7 @@ describe("Renderer Module", function()
             priority = "M",
             _reverse_deps = {{uuid = "rev1"}}
           }
-          local expected = "* [ ] Blocking task with priority [🟠,⚓] (blocking)"
+          local expected = "* [ ] Blocking task with priority [🟠⚓] (blocking)"
           assert.are.same(expected, renderer.format_task(task))
         end)
 
