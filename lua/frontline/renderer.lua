@@ -119,7 +119,7 @@ local function get_extra_icons(task)
   end
 
   if #icons > 0 then
-    return string.format("[%s]", table.concat(icons, ","))
+    return string.format("[%s]", table.concat(icons))
   end
   return ""
 end
