@@ -196,6 +196,9 @@ function M.setup(opts)
   -- Merge user config with defaults
   config = vim.tbl_deep_extend("force", config, opts)
 
+  -- Update the exposed config reference so completion module gets the merged config
+  M.config = config
+
   -- Pass config to mappings module
   mappings.set_config(config)
 
