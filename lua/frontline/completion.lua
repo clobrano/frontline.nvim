@@ -30,7 +30,8 @@ function M.get_projects(workspace_rc)
   vim.notify(string.format("DEBUG: Querying projects from taskwarrior (workspace_rc=%s)", workspace_rc or "nil"), vim.log.levels.INFO)
 
   local task_client = require("frontline.task_client")
-  local tasks, err = task_client.execute_query("status:pending or status:waiting", workspace_rc)
+  -- Query ALL tasks to get projects (not just pending/waiting)
+  local tasks, err = task_client.execute_query("", workspace_rc)
 
   if not tasks then
     vim.notify("Failed to query projects: " .. tostring(err), vim.log.levels.WARN)
@@ -68,7 +69,8 @@ function M.get_tags(workspace_rc)
   vim.notify(string.format("DEBUG: Querying tags from taskwarrior (workspace_rc=%s)", workspace_rc or "nil"), vim.log.levels.INFO)
 
   local task_client = require("frontline.task_client")
-  local tasks, err = task_client.execute_query("status:pending or status:waiting", workspace_rc)
+  -- Query ALL tasks to get tags (not just pending/waiting)
+  local tasks, err = task_client.execute_query("", workspace_rc)
 
   if not tasks then
     vim.notify("Failed to query tags: " .. tostring(err), vim.log.levels.WARN)
