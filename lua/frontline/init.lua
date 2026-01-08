@@ -4,6 +4,7 @@ local parser = require("frontline.parser")
 local task_client = require("frontline.task_client")
 local renderer = require("frontline.renderer")
 local mappings = require("frontline.mappings")
+local completion = require("frontline.completion")
 
 -- Default configuration
 local config = {
@@ -61,6 +62,9 @@ end
 function M.get_config()
   return config
 end
+
+-- Expose config for completion module
+M.config = config
 
 -- Function to refresh tasks in the current buffer
 local function refresh_tasks()
@@ -192,8 +196,14 @@ function M.setup(opts)
   -- Merge user config with defaults
   config = vim.tbl_deep_extend("force", config, opts)
 
+  -- Update the exposed config reference so completion module gets the merged config
+  M.config = config
+
   -- Pass config to mappings module
   mappings.set_config(config)
+
+  -- Initialize completion module
+  completion.setup()
 
   -- Autocommands for refreshing task lists
   vim.api.nvim_create_autocmd({"BufReadPost", "BufWritePost"}, {
