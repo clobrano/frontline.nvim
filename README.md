@@ -12,6 +12,7 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 - ⌨️ Interactive task management with keybindings
 - 🕐 Local timezone display for dates and times
 - 🗂️ Multiple Taskwarrior workspaces support with `@workspace` syntax
+- 🎨 Smart autocomplete for projects, tags, dates, workspaces, and priorities
 
 ## Installation
 
@@ -149,6 +150,51 @@ Place your cursor on any task line and use these default keybindings:
 | `<leader>tm` | Modify Task | Modify task properties (prompts for input) |
 | `<leader>ta` | Add Annotation | Add a note to the task |
 | `<leader>te` | Edit Task | Open task in Taskwarrior's interactive editor |
+| `<leader>tn` | Create Task | Create new task with smart context-aware pre-fill |
+| `<leader>tB` | Add Dependency | Create new task as dependency of current task |
+| `<leader>tu` | Undo Task | Undo last action on task |
+| `<leader>tb` | Show Dependencies | Show task dependencies and reverse dependencies |
+
+### Smart Task Creation with Autocomplete
+
+The plugin provides intelligent autocomplete when creating tasks (`<leader>tn`) or adding dependencies (`<leader>tB`):
+
+**Autocomplete Features:**
+- **Projects** (`project:`): Suggests existing projects from your Taskwarrior database
+- **Tags** (`+`): Suggests existing tags (excluding virtual tags like PENDING, COMPLETED)
+- **Dates** (`due:`, `scheduled:`): Suggests common date shortcuts (today, tomorrow, eow, 1w, etc.)
+- **Workspaces** (`@`): Suggests configured workspaces
+- **Priority** (`priority:`): Suggests H (High), M (Medium), L (Low)
+
+**How to Use Autocomplete:**
+1. Press `<leader>tn` to create a new task
+2. Type a task attribute prefix (e.g., `project:`, `+`, `due:`, `@`)
+3. Press `<Tab>` or `<Ctrl-d>` to see suggestions
+4. Continue typing to filter, use arrow keys to select, and press `<Enter>` to accept
+
+**Examples:**
+```
+# Autocomplete projects:
+New task: Fix bug project:<Tab>
+  → Shows: backend, frontend, mobile, web
+
+# Autocomplete tags:
+New task: Update docs +<Tab>
+  → Shows: bug, feature, documentation, urgent
+
+# Autocomplete dates:
+New task: Review PR due:<Tab>
+  → Shows: today, tomorrow, eow, 1w, 2w, 1m
+
+# Autocomplete workspaces:
+New task: @<Tab>
+  → Shows: personal, work
+```
+
+**Smart Context-Aware Pre-fill:**
+- When creating from a task line: inherits workspace, project, due date, and scheduled date
+- When creating from a header: inherits all filters from the header query
+- Project and tags are cached for 5 minutes to improve performance
 
 **Examples:**
 

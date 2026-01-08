@@ -486,11 +486,22 @@ function M.add_task_as_dependency()
     default_input = default_input .. string.format("project:%s ", default_project)
   end
 
-  -- Prompt user for new task description
-  vim.ui.input({
-    prompt = "New dependency task (description + attributes): ",
-    default = default_input
-  }, function(input)
+  -- Prompt user for new task description with completion
+  vim.schedule(function()
+    local ok, input = pcall(vim.fn.input, {
+      prompt = "New dependency task (description + attributes): ",
+      default = default_input,
+      completion = "customlist,FrontlineCompleteTaskInput",
+    })
+
+    -- Clear command line
+    vim.cmd("redraw")
+
+    if not ok then
+      vim.notify("Task creation cancelled", vim.log.levels.INFO)
+      return
+    end
+
     if not input or input == "" then
       vim.notify("Task creation cancelled", vim.log.levels.INFO)
       return
@@ -924,40 +935,48 @@ function M.create_new_task()
     end
   end
 
-  -- Prompt user for task input
-  vim.ui.input(
-    {
+  -- Use vim.fn.input with custom completion for autocomplete support
+  vim.schedule(function()
+    local ok, input = pcall(vim.fn.input, {
       prompt = "New task: ",
       default = prefill,
-    },
-    function(input)
-      if not input or input == "" then
-        vim.notify("Task creation cancelled", vim.log.levels.INFO)
-        return
-      end
+      completion = "customlist,FrontlineCompleteTaskInput",
+    })
 
-      -- Parse workspace from input (e.g., "@work Fix bug project:web")
-      local workspace_override, cleaned_input = parse_workspace_from_input(input)
+    -- Clear command line
+    vim.cmd("redraw")
 
-      -- Notify if workspace override is used
-      if workspace_override then
-        vim.notify(string.format("Creating task in workspace: %s", workspace_override), vim.log.levels.INFO)
-      end
-
-      -- Create the task
-      local cmd = build_task_command(string.format("add %s", cleaned_input), workspace_override)
-      local output = vim.fn.system(cmd)
-      local exit_code = vim.v.shell_error
-
-      if exit_code ~= 0 then
-        vim.notify("Failed to create task: " .. output, vim.log.levels.ERROR)
-        return
-      end
-
-      vim.notify("Task created successfully", vim.log.levels.INFO)
-      require("frontline").refresh_current_buffer()
+    if not ok then
+      vim.notify("Task creation cancelled", vim.log.levels.INFO)
+      return
     end
-  )
+
+    if not input or input == "" then
+      vim.notify("Task creation cancelled", vim.log.levels.INFO)
+      return
+    end
+
+    -- Parse workspace from input (e.g., "@work Fix bug project:web")
+    local workspace_override, cleaned_input = parse_workspace_from_input(input)
+
+    -- Notify if workspace override is used
+    if workspace_override then
+      vim.notify(string.format("Creating task in workspace: %s", workspace_override), vim.log.levels.INFO)
+    end
+
+    -- Create the task
+    local cmd = build_task_command(string.format("add %s", cleaned_input), workspace_override)
+    local output = vim.fn.system(cmd)
+    local exit_code = vim.v.shell_error
+
+    if exit_code ~= 0 then
+      vim.notify("Failed to create task: " .. output, vim.log.levels.ERROR)
+      return
+    end
+
+    vim.notify("Task created successfully", vim.log.levels.INFO)
+    require("frontline").refresh_current_buffer()
+  end)
 end
 
 return M
