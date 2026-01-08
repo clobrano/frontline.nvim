@@ -157,7 +157,7 @@ Place your cursor on any task line and use these default keybindings:
 
 ### Smart Task Creation with Autocomplete
 
-The plugin provides intelligent autocomplete when creating tasks (`<leader>tn`) or adding dependencies (`<leader>tB`):
+The plugin provides intelligent autocomplete when creating tasks (`<leader>tn`) or adding dependencies (`<leader>tB`).
 
 **Autocomplete Features:**
 - **Projects** (`project:`): Suggests existing projects from your Taskwarrior database
@@ -167,33 +167,42 @@ The plugin provides intelligent autocomplete when creating tasks (`<leader>tn`) 
 - **Priority** (`priority:`): Suggests H (High), M (Medium), L (Low)
 
 **How to Use Autocomplete:**
-1. Press `<leader>tn` to create a new task
-2. Type a task attribute prefix (e.g., `project:`, `+`, `due:`, `@`)
-3. Press `<Tab>` or `<Ctrl-d>` to see suggestions
-4. Continue typing to filter, use arrow keys to select, and press `<Enter>` to accept
+1. Press `<leader>tn` to create a new task (opens command-line mode with `:FrontlineCreateTask`)
+2. The command line will be pre-filled with context-aware attributes if available
+3. Type your task description and/or attributes (e.g., `project:`, `+`, `due:`, `@`)
+4. Press `<Tab>` to trigger autocomplete suggestions
+5. Use `<Tab>` and `<Shift-Tab>` to cycle through suggestions, or continue typing to filter
+6. Press `<Enter>` to execute the command and create the task
+7. Press `<Ctrl-c>` or `<Esc>` to cancel
 
 **Examples:**
 ```
-# Autocomplete projects:
-New task: Fix bug project:<Tab>
-  → Shows: backend, frontend, mobile, web
+# After pressing <leader>tn:
+:FrontlineCreateTask Fix bug project:<Tab>
+  → Suggests: backend, frontend, mobile, web
 
-# Autocomplete tags:
-New task: Update docs +<Tab>
-  → Shows: bug, feature, documentation, urgent
+:FrontlineCreateTask Update docs +<Tab>
+  → Suggests: bug, feature, documentation, urgent
 
-# Autocomplete dates:
-New task: Review PR due:<Tab>
-  → Shows: today, tomorrow, eow, 1w, 2w, 1m
+:FrontlineCreateTask Review PR due:<Tab>
+  → Suggests: today, tomorrow, eow, 1w, 2w, 1m
 
-# Autocomplete workspaces:
-New task: @<Tab>
-  → Shows: personal, work
+:FrontlineCreateTask @<Tab>
+  → Suggests: personal, work
+```
+
+**Alternative: Use Commands Directly**
+
+You can also type the commands directly in command mode:
+```vim
+:FrontlineCreateTask Fix authentication bug project:backend priority:H due:tomorrow
+:FrontlineCreateDependency Setup database project:backend
 ```
 
 **Smart Context-Aware Pre-fill:**
 - When creating from a task line: inherits workspace, project, due date, and scheduled date
 - When creating from a header: inherits all filters from the header query
+- The command line opens pre-filled with these context attributes
 - Project and tags are cached for 5 minutes to improve performance
 
 **Examples:**
