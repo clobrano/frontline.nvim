@@ -215,6 +215,26 @@ local function filter_suggestions(suggestions, prefix)
   return filtered
 end
 
+-- Parse workspace from the command line input
+-- Returns workspace_name (string or nil) and workspace_rc (path or nil)
+local function parse_workspace_from_cmdline(cmdline)
+  -- Look for @workspace_name in the command line
+  local workspace_name = string.match(cmdline, "@([%w_%-]+)")
+
+  if not workspace_name then
+    return nil, nil
+  end
+
+  -- Get the workspace rc file path
+  local frontline = require("frontline")
+  if frontline.config and frontline.config.workspaces and frontline.config.workspaces[workspace_name] then
+    local workspace_rc = vim.fn.expand(frontline.config.workspaces[workspace_name])
+    return workspace_name, workspace_rc
+  end
+
+  return workspace_name, nil
+end
+
 -- Main completion function for vim.fn.input
 -- This is called by Neovim's completion mechanism
 -- arglead: the current word being completed
@@ -233,21 +253,32 @@ function M.complete_task_input(arglead, cmdline, cursorpos)
   if comp_type == "workspace" then
     suggestions = M.get_workspaces()
   elseif comp_type == "project" then
-    -- Get current workspace if available
-    local frontline = require("frontline")
-    local current_workspace = frontline.get_current_workspace()
-    local workspace_rc = nil
-    if current_workspace and frontline.config.workspaces and frontline.config.workspaces[current_workspace] then
-      workspace_rc = frontline.config.workspaces[current_workspace]
+    -- First check if there's a workspace in the command line being typed
+    local _, workspace_rc = parse_workspace_from_cmdline(cmdline)
+
+    -- If no workspace in cmdline, fall back to current buffer workspace
+    if not workspace_rc then
+      local frontline = require("frontline")
+      local current_workspace = frontline.get_current_workspace()
+      if current_workspace and frontline.config.workspaces and frontline.config.workspaces[current_workspace] then
+        workspace_rc = vim.fn.expand(frontline.config.workspaces[current_workspace])
+      end
     end
+
     suggestions = M.get_projects(workspace_rc)
   elseif comp_type == "tag" then
-    local frontline = require("frontline")
-    local current_workspace = frontline.get_current_workspace()
-    local workspace_rc = nil
-    if current_workspace and frontline.config.workspaces and frontline.config.workspaces[current_workspace] then
-      workspace_rc = frontline.config.workspaces[current_workspace]
+    -- First check if there's a workspace in the command line being typed
+    local _, workspace_rc = parse_workspace_from_cmdline(cmdline)
+
+    -- If no workspace in cmdline, fall back to current buffer workspace
+    if not workspace_rc then
+      local frontline = require("frontline")
+      local current_workspace = frontline.get_current_workspace()
+      if current_workspace and frontline.config.workspaces and frontline.config.workspaces[current_workspace] then
+        workspace_rc = vim.fn.expand(frontline.config.workspaces[current_workspace])
+      end
     end
+
     suggestions = M.get_tags(workspace_rc)
   elseif comp_type == "date" then
     suggestions = M.get_date_suggestions()
