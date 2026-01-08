@@ -681,6 +681,75 @@ function M.modify_task()
 end
 
 -- Add annotation to task
+-- Show all annotations for a task
+function M.show_annotations()
+  local hash = M.get_task_hash_under_cursor()
+  if not hash then
+    return
+  end
+
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+
+  -- Get task information
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
+  local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
+  local exit_code = vim.v.shell_error
+
+  if exit_code ~= 0 then
+    vim.notify("Failed to get task information", vim.log.levels.ERROR)
+    return
+  end
+
+  -- Parse JSON
+  local success, tasks = pcall(vim.fn.json_decode, task_json)
+  if not success or not tasks or #tasks == 0 then
+    vim.notify("Failed to parse task data", vim.log.levels.ERROR)
+    return
+  end
+
+  local task = tasks[1]
+
+  -- Check if there are any annotations
+  if not task.annotations or #task.annotations == 0 then
+    vim.notify("Task has no annotations", vim.log.levels.INFO)
+    return
+  end
+
+  -- Build display
+  local echo_chunks = {}
+
+  table.insert(echo_chunks, {
+    string.format("Annotations (%d total):\n", #task.annotations),
+    "Title"
+  })
+
+  for i, annotation in ipairs(task.annotations) do
+    -- Format the timestamp if available
+    local timestamp = ""
+    if annotation.entry then
+      -- Convert ISO timestamp to readable format
+      local iso_time = annotation.entry
+      -- Extract date parts (format: YYYYMMDDTHHmmssZ)
+      local year = string.sub(iso_time, 1, 4)
+      local month = string.sub(iso_time, 5, 6)
+      local day = string.sub(iso_time, 7, 8)
+      local hour = string.sub(iso_time, 10, 11)
+      local min = string.sub(iso_time, 12, 13)
+      timestamp = string.format("[%s-%s-%s %s:%s] ", year, month, day, hour, min)
+    end
+
+    local description = annotation.description or "No description"
+    table.insert(echo_chunks, {
+      string.format("  %d. %s%s\n", i, timestamp, description),
+      "Normal"
+    })
+  end
+
+  vim.api.nvim_echo(echo_chunks, true, {})
+end
+
 function M.add_annotation()
   local hash = M.get_task_hash_under_cursor()
   if not hash then
