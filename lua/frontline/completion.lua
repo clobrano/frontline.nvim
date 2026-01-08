@@ -308,6 +308,8 @@ function M.setup()
   -- Register the completion function globally for Vim commands
   _G.FrontlineCompleteTaskInput = M.complete_task_input
 
+  vim.notify("DEBUG: Setting up FrontlineCreateTask command", vim.log.levels.INFO)
+
   -- Create user commands with completion support
   vim.api.nvim_create_user_command("FrontlineCreateTask", function(opts)
     local mappings = require("frontline.mappings")
@@ -315,10 +317,17 @@ function M.setup()
   end, {
     nargs = "*",
     complete = function(arglead, cmdline, cursorpos)
+      vim.notify("DEBUG: Completion callback triggered!", vim.log.levels.INFO)
       -- Remove command name to get just the input part
       local input_line = cmdline:match("^%s*%S+%s*(.*)$") or ""
       local input_cursor = cursorpos - (#cmdline - #input_line)
-      return M.complete_task_input(arglead, input_line, input_cursor)
+
+      local ok, result = pcall(M.complete_task_input, arglead, input_line, input_cursor)
+      if not ok then
+        vim.notify("ERROR in completion: " .. tostring(result), vim.log.levels.ERROR)
+        return {}
+      end
+      return result
     end,
     desc = "Create a new task with autocomplete support",
   })
@@ -331,10 +340,18 @@ function M.setup()
     complete = function(arglead, cmdline, cursorpos)
       local input_line = cmdline:match("^%s*%S+%s*(.*)$") or ""
       local input_cursor = cursorpos - (#cmdline - #input_line)
-      return M.complete_task_input(arglead, input_line, input_cursor)
+
+      local ok, result = pcall(M.complete_task_input, arglead, input_line, input_cursor)
+      if not ok then
+        vim.notify("ERROR in completion: " .. tostring(result), vim.log.levels.ERROR)
+        return {}
+      end
+      return result
     end,
     desc = "Create a new task as dependency with autocomplete support",
   })
+
+  vim.notify("DEBUG: FrontlineCreateTask command created", vim.log.levels.INFO)
 end
 
 return M
