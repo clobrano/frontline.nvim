@@ -22,7 +22,8 @@ local config = {
     toggle_done = "<leader>td",
     toggle_started = "<leader>ts",
     modify_task = "<leader>tm",
-    add_annotation = "<leader>ta",
+    show_annotations = "<leader>ta",
+    add_annotation = "<leader>tA",
     edit_task = "<leader>te",
     show_blocking_dependencies = "<leader>tb",
     add_dependency = "<leader>tB",
@@ -243,6 +244,12 @@ function M.setup(opts)
       if config.mappings.modify_task then
         vim.keymap.set("n", config.mappings.modify_task, mappings.modify_task,
           vim.tbl_extend("force", opts_mapping, { desc = "Modify task" }))
+      end
+
+      -- Show annotations
+      if config.mappings.show_annotations then
+        vim.keymap.set("n", config.mappings.show_annotations, mappings.show_annotations,
+          vim.tbl_extend("force", opts_mapping, { desc = "Show task annotations" }))
       end
 
       -- Add annotation
