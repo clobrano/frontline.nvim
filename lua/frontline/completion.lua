@@ -23,8 +23,11 @@ end
 -- Query all unique projects from taskwarrior
 function M.get_projects(workspace_rc)
   if is_cache_valid() and cache.projects then
+    vim.notify(string.format("DEBUG: Returning %d cached projects", #cache.projects), vim.log.levels.INFO)
     return cache.projects
   end
+
+  vim.notify(string.format("DEBUG: Querying projects from taskwarrior (workspace_rc=%s)", workspace_rc or "nil"), vim.log.levels.INFO)
 
   local task_client = require("frontline.task_client")
   local tasks, err = task_client.execute_query("status:pending or status:waiting", workspace_rc)
@@ -33,6 +36,8 @@ function M.get_projects(workspace_rc)
     vim.notify("Failed to query projects: " .. tostring(err), vim.log.levels.WARN)
     return {}
   end
+
+  vim.notify(string.format("DEBUG: Query returned %d tasks", #tasks), vim.log.levels.INFO)
 
   local projects = {}
   local seen = {}
@@ -44,6 +49,8 @@ function M.get_projects(workspace_rc)
     end
   end
 
+  vim.notify(string.format("DEBUG: Found %d unique projects from %d tasks", #projects, #tasks), vim.log.levels.INFO)
+
   table.sort(projects)
   cache.projects = projects
   cache.last_update = os.time()
@@ -54,8 +61,11 @@ end
 -- Query all unique tags from taskwarrior (excluding virtual tags)
 function M.get_tags(workspace_rc)
   if is_cache_valid() and cache.tags then
+    vim.notify(string.format("DEBUG: Returning %d cached tags", #cache.tags), vim.log.levels.INFO)
     return cache.tags
   end
+
+  vim.notify(string.format("DEBUG: Querying tags from taskwarrior (workspace_rc=%s)", workspace_rc or "nil"), vim.log.levels.INFO)
 
   local task_client = require("frontline.task_client")
   local tasks, err = task_client.execute_query("status:pending or status:waiting", workspace_rc)
@@ -64,6 +74,8 @@ function M.get_tags(workspace_rc)
     vim.notify("Failed to query tags: " .. tostring(err), vim.log.levels.WARN)
     return {}
   end
+
+  vim.notify(string.format("DEBUG: Query returned %d tasks", #tasks), vim.log.levels.INFO)
 
   local tags = {}
   local seen = {}
@@ -79,6 +91,8 @@ function M.get_tags(workspace_rc)
       end
     end
   end
+
+  vim.notify(string.format("DEBUG: Found %d unique tags from %d tasks", #tags, #tasks), vim.log.levels.INFO)
 
   table.sort(tags)
   cache.tags = tags
