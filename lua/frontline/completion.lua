@@ -241,10 +241,16 @@ end
 -- cmdline: the entire command line
 -- cursorpos: the cursor position in the command line
 function M.complete_task_input(arglead, cmdline, cursorpos)
+  -- Debug: Print what we receive
+  vim.notify(string.format("DEBUG: arglead='%s', cmdline='%s', cursorpos=%d", arglead or "", cmdline or "", cursorpos or 0), vim.log.levels.INFO)
+
   -- Get completion context
   local comp_type, prefix = parse_completion_context(cmdline, cursorpos)
 
+  vim.notify(string.format("DEBUG: comp_type='%s', prefix='%s'", comp_type or "nil", prefix or "nil"), vim.log.levels.INFO)
+
   if not comp_type then
+    vim.notify("DEBUG: No completion type found, returning empty", vim.log.levels.WARN)
     return {}
   end
 
@@ -252,6 +258,7 @@ function M.complete_task_input(arglead, cmdline, cursorpos)
 
   if comp_type == "workspace" then
     suggestions = M.get_workspaces()
+    vim.notify(string.format("DEBUG: Found %d workspaces", #suggestions), vim.log.levels.INFO)
   elseif comp_type == "project" then
     -- First check if there's a workspace in the command line being typed
     local _, workspace_rc = parse_workspace_from_cmdline(cmdline)
@@ -266,6 +273,7 @@ function M.complete_task_input(arglead, cmdline, cursorpos)
     end
 
     suggestions = M.get_projects(workspace_rc)
+    vim.notify(string.format("DEBUG: Found %d projects (workspace_rc=%s)", #suggestions, workspace_rc or "nil"), vim.log.levels.INFO)
   elseif comp_type == "tag" then
     -- First check if there's a workspace in the command line being typed
     local _, workspace_rc = parse_workspace_from_cmdline(cmdline)
@@ -280,6 +288,7 @@ function M.complete_task_input(arglead, cmdline, cursorpos)
     end
 
     suggestions = M.get_tags(workspace_rc)
+    vim.notify(string.format("DEBUG: Found %d tags (workspace_rc=%s)", #suggestions, workspace_rc or "nil"), vim.log.levels.INFO)
   elseif comp_type == "date" then
     suggestions = M.get_date_suggestions()
   elseif comp_type == "priority" then
@@ -288,6 +297,8 @@ function M.complete_task_input(arglead, cmdline, cursorpos)
 
   -- Filter suggestions based on what user has typed
   local filtered = filter_suggestions(suggestions, prefix)
+
+  vim.notify(string.format("DEBUG: Returning %d filtered suggestions", #filtered), vim.log.levels.INFO)
 
   return filtered
 end
