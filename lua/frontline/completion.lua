@@ -263,8 +263,36 @@ end
 
 -- Setup completion for the plugin
 function M.setup()
-  -- Register the completion function globally so vim.fn.input can use it
+  -- Register the completion function globally for Vim commands
   _G.FrontlineCompleteTaskInput = M.complete_task_input
+
+  -- Create user commands with completion support
+  vim.api.nvim_create_user_command("FrontlineCreateTask", function(opts)
+    local mappings = require("frontline.mappings")
+    mappings.create_task_with_input(opts.args)
+  end, {
+    nargs = "*",
+    complete = function(arglead, cmdline, cursorpos)
+      -- Remove command name to get just the input part
+      local input_line = cmdline:match("^%s*%S+%s*(.*)$") or ""
+      local input_cursor = cursorpos - (#cmdline - #input_line)
+      return M.complete_task_input(arglead, input_line, input_cursor)
+    end,
+    desc = "Create a new task with autocomplete support",
+  })
+
+  vim.api.nvim_create_user_command("FrontlineCreateDependency", function(opts)
+    local mappings = require("frontline.mappings")
+    mappings.create_dependency_with_input(opts.args)
+  end, {
+    nargs = "*",
+    complete = function(arglead, cmdline, cursorpos)
+      local input_line = cmdline:match("^%s*%S+%s*(.*)$") or ""
+      local input_cursor = cursorpos - (#cmdline - #input_line)
+      return M.complete_task_input(arglead, input_line, input_cursor)
+    end,
+    desc = "Create a new task as dependency with autocomplete support",
+  })
 end
 
 return M

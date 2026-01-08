@@ -3,6 +3,9 @@ local M = {}
 -- Store reference to config (set by init.lua)
 local config = { enable_reverse_dependencies = true }
 
+-- Store parent task info for dependency creation
+local dependency_parent_task = nil
+
 -- Function to set config from init.lua
 function M.set_config(new_config)
   config = new_config
@@ -444,6 +447,107 @@ function M.show_blocking_dependencies()
 end
 
 -- Add a new task as a dependency for the task under cursor
+-- Create a dependency task with the given input string (called by command)
+function M.create_dependency_with_input(input)
+  if not dependency_parent_task then
+    vim.notify("No parent task set for dependency creation", vim.log.levels.ERROR)
+    return
+  end
+
+  if not input or input == "" then
+    vim.notify("Task creation cancelled", vim.log.levels.INFO)
+    dependency_parent_task = nil
+    return
+  end
+
+  local hash = dependency_parent_task.hash
+  local workspace = dependency_parent_task.workspace
+
+  -- Parse workspace from input (e.g., "@work Fix bug project:web")
+  local workspace_override, cleaned_input = parse_workspace_from_input(input)
+
+  -- Notify if workspace override is used
+  if workspace_override then
+    vim.notify(string.format("Creating dependency task in workspace: %s", workspace_override), vim.log.levels.INFO)
+  end
+
+  -- Extract description and attributes
+  -- User input format: "description project:X priority:H ..."
+  -- We need to wrap the description in quotes
+  local first_space = cleaned_input:find("%s")
+  local description, attributes
+
+  if first_space then
+    -- Find where attributes start (project:, priority:, due:, etc.)
+    local attr_start = cleaned_input:find("%w+:")
+    if attr_start then
+      description = cleaned_input:sub(1, attr_start - 1):gsub("%s+$", "")
+      attributes = cleaned_input:sub(attr_start)
+    else
+      description = cleaned_input
+      attributes = ""
+    end
+  else
+    description = cleaned_input
+    attributes = ""
+  end
+
+  -- Escape single quotes in description
+  local escaped_desc = description:gsub("'", "'\\''")
+
+  -- Create the new task
+  local add_cmd = build_task_command(string.format("add '%s' %s", escaped_desc, attributes), workspace_override)
+  vim.notify("Creating dependency task...", vim.log.levels.INFO)
+
+  local add_output = vim.fn.system(add_cmd)
+  local add_exit_code = vim.v.shell_error
+
+  if add_exit_code ~= 0 then
+    vim.notify("Failed to create task: " .. add_output, vim.log.levels.ERROR)
+    dependency_parent_task = nil
+    return
+  end
+
+  -- Extract the new task ID from output (format: "Created task N.")
+  local new_task_id = string.match(add_output, "Created task (%d+)%.")
+  if not new_task_id then
+    vim.notify("Failed to extract new task ID", vim.log.levels.ERROR)
+    dependency_parent_task = nil
+    return
+  end
+
+  -- Get the UUID of the newly created task (use same workspace)
+  local new_task_cmd = build_task_command(string.format("%s export", new_task_id), workspace_override)
+  local new_task_json = vim.fn.system(new_task_cmd)
+  new_task_json = filter_taskwarrior_messages(new_task_json, workspace_override)
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Failed to get new task UUID", vim.log.levels.ERROR)
+    dependency_parent_task = nil
+    return
+  end
+
+  local new_success, new_tasks = pcall(vim.fn.json_decode, new_task_json)
+  if not new_success or not new_tasks or #new_tasks == 0 then
+    vim.notify("Failed to parse new task data", vim.log.levels.ERROR)
+    dependency_parent_task = nil
+    return
+  end
+
+  local new_uuid = new_tasks[1].uuid
+
+  -- Add the new task as a dependency to the original task
+  vim.notify("Adding dependency...", vim.log.levels.INFO)
+
+  if execute_task_command(string.format("%s modify depends:%s", hash, new_uuid), workspace) then
+    vim.notify(string.format("Created task %s as dependency", new_task_id), vim.log.levels.INFO)
+    require("frontline").refresh_current_buffer()
+  end
+
+  -- Clear the parent task info
+  dependency_parent_task = nil
+end
+
+-- Add a new task as a dependency of the current task (triggered by keybinding)
 function M.add_task_as_dependency()
   local hash = M.get_task_hash_under_cursor()
   if not hash then
@@ -480,109 +584,27 @@ function M.add_task_as_dependency()
   -- Build default input with workspace and project
   local default_input = ""
   if current_workspace then
-    default_input = string.format("@%s ", current_workspace)
+    default_input = string.format("@%s", current_workspace)
   end
   if default_project ~= "" then
-    default_input = default_input .. string.format("project:%s ", default_project)
+    if default_input ~= "" then
+      default_input = default_input .. " "
+    end
+    default_input = default_input .. string.format("project:%s", default_project)
   end
 
-  -- Prompt user for new task description with completion
-  vim.schedule(function()
-    local ok, input = pcall(vim.fn.input, {
-      prompt = "New dependency task (description + attributes): ",
-      default = default_input,
-      completion = "customlist,FrontlineCompleteTaskInput",
-    })
+  -- Store parent task info for the command to access
+  dependency_parent_task = {
+    hash = hash,
+    workspace = workspace,
+  }
 
-    -- Clear command line
-    vim.cmd("redraw")
-
-    if not ok then
-      vim.notify("Task creation cancelled", vim.log.levels.INFO)
-      return
-    end
-
-    if not input or input == "" then
-      vim.notify("Task creation cancelled", vim.log.levels.INFO)
-      return
-    end
-
-    -- Parse workspace from input (e.g., "@work Fix bug project:web")
-    local workspace_override, cleaned_input = parse_workspace_from_input(input)
-
-    -- Notify if workspace override is used
-    if workspace_override then
-      vim.notify(string.format("Creating dependency task in workspace: %s", workspace_override), vim.log.levels.INFO)
-    end
-
-    -- Extract description and attributes
-    -- User input format: "description project:X priority:H ..."
-    -- We need to wrap the description in quotes
-    local first_space = cleaned_input:find("%s")
-    local description, attributes
-
-    if first_space then
-      -- Find where attributes start (project:, priority:, due:, etc.)
-      local attr_start = cleaned_input:find("%w+:")
-      if attr_start then
-        description = cleaned_input:sub(1, attr_start - 1):gsub("%s+$", "")
-        attributes = cleaned_input:sub(attr_start)
-      else
-        description = cleaned_input
-        attributes = ""
-      end
-    else
-      description = cleaned_input
-      attributes = ""
-    end
-
-    -- Escape single quotes in description
-    local escaped_desc = description:gsub("'", "'\\''")
-
-    -- Create the new task
-    local add_cmd = build_task_command(string.format("add '%s' %s", escaped_desc, attributes), workspace_override)
-    vim.notify("Creating dependency task...", vim.log.levels.INFO)
-
-    local add_output = vim.fn.system(add_cmd)
-    local add_exit_code = vim.v.shell_error
-
-    if add_exit_code ~= 0 then
-      vim.notify("Failed to create task: " .. add_output, vim.log.levels.ERROR)
-      return
-    end
-
-    -- Extract the new task ID from output (format: "Created task N.")
-    local new_task_id = string.match(add_output, "Created task (%d+)%.")
-    if not new_task_id then
-      vim.notify("Failed to extract new task ID", vim.log.levels.ERROR)
-      return
-    end
-
-    -- Get the UUID of the newly created task (use same workspace)
-    local new_task_cmd = build_task_command(string.format("%s export", new_task_id), workspace_override)
-    local new_task_json = vim.fn.system(new_task_cmd)
-    new_task_json = filter_taskwarrior_messages(new_task_json, workspace_override)
-    if vim.v.shell_error ~= 0 then
-      vim.notify("Failed to get new task UUID", vim.log.levels.ERROR)
-      return
-    end
-
-    local new_success, new_tasks = pcall(vim.fn.json_decode, new_task_json)
-    if not new_success or not new_tasks or #new_tasks == 0 then
-      vim.notify("Failed to parse new task data", vim.log.levels.ERROR)
-      return
-    end
-
-    local new_uuid = new_tasks[1].uuid
-
-    -- Add the new task as a dependency to the original task
-    vim.notify("Adding dependency...", vim.log.levels.INFO)
-
-    if execute_task_command(string.format("%s modify depends:%s", hash, new_uuid), workspace) then
-      vim.notify(string.format("Created task %s as dependency", new_task_id), vim.log.levels.INFO)
-      require("frontline").refresh_current_buffer()
-    end
-  end)
+  -- Open command line with FrontlineCreateDependency command and pre-filled text
+  if default_input ~= "" then
+    vim.fn.feedkeys(":FrontlineCreateDependency " .. default_input .. " ", "n")
+  else
+    vim.fn.feedkeys(":FrontlineCreateDependency ", "n")
+  end
 end
 
 -- Toggle task between started and unstarted
@@ -874,9 +896,8 @@ local function get_context_from_header()
   }
 end
 
--- Create a new task with smart pre-fill based on context
-function M.create_new_task()
-  -- Determine pre-fill based on cursor position
+-- Helper function to get smart pre-fill based on context
+local function get_task_creation_prefill()
   local prefill = ""
 
   -- First, check if cursor is on a task line
@@ -902,7 +923,7 @@ function M.create_new_task()
       table.insert(parts, string.format("scheduled:%s", context_from_task.scheduled))
     end
 
-    prefill = table.concat(parts, " ") .. " "
+    prefill = table.concat(parts, " ")
   else
     -- Check if cursor is on a header with project, tags, workspace, and/or date filters
     local context_from_header = get_context_from_header()
@@ -931,52 +952,54 @@ function M.create_new_task()
         table.insert(parts, string.format("scheduled:%s", context_from_header.scheduled))
       end
 
-      prefill = table.concat(parts, " ") .. " "
+      prefill = table.concat(parts, " ")
     end
   end
 
-  -- Use vim.fn.input with custom completion for autocomplete support
-  vim.schedule(function()
-    local ok, input = pcall(vim.fn.input, {
-      prompt = "New task: ",
-      default = prefill,
-      completion = "customlist,FrontlineCompleteTaskInput",
-    })
+  return prefill
+end
 
-    -- Clear command line
-    vim.cmd("redraw")
+-- Create a task with the given input string (called by command)
+function M.create_task_with_input(input)
+  if not input or input == "" then
+    vim.notify("Task creation cancelled", vim.log.levels.INFO)
+    return
+  end
 
-    if not ok then
-      vim.notify("Task creation cancelled", vim.log.levels.INFO)
-      return
-    end
+  -- Parse workspace from input (e.g., "@work Fix bug project:web")
+  local workspace_override, cleaned_input = parse_workspace_from_input(input)
 
-    if not input or input == "" then
-      vim.notify("Task creation cancelled", vim.log.levels.INFO)
-      return
-    end
+  -- Notify if workspace override is used
+  if workspace_override then
+    vim.notify(string.format("Creating task in workspace: %s", workspace_override), vim.log.levels.INFO)
+  end
 
-    -- Parse workspace from input (e.g., "@work Fix bug project:web")
-    local workspace_override, cleaned_input = parse_workspace_from_input(input)
+  -- Create the task
+  local cmd = build_task_command(string.format("add %s", cleaned_input), workspace_override)
+  local output = vim.fn.system(cmd)
+  local exit_code = vim.v.shell_error
 
-    -- Notify if workspace override is used
-    if workspace_override then
-      vim.notify(string.format("Creating task in workspace: %s", workspace_override), vim.log.levels.INFO)
-    end
+  if exit_code ~= 0 then
+    vim.notify("Failed to create task: " .. output, vim.log.levels.ERROR)
+    return
+  end
 
-    -- Create the task
-    local cmd = build_task_command(string.format("add %s", cleaned_input), workspace_override)
-    local output = vim.fn.system(cmd)
-    local exit_code = vim.v.shell_error
+  vim.notify("Task created successfully", vim.log.levels.INFO)
+  require("frontline").refresh_current_buffer()
+end
 
-    if exit_code ~= 0 then
-      vim.notify("Failed to create task: " .. output, vim.log.levels.ERROR)
-      return
-    end
+-- Create a new task with smart pre-fill based on context (triggered by keybinding)
+function M.create_new_task()
+  -- Get context-aware pre-fill
+  local prefill = get_task_creation_prefill()
 
-    vim.notify("Task created successfully", vim.log.levels.INFO)
-    require("frontline").refresh_current_buffer()
-  end)
+  -- Open command line with FrontlineCreateTask command and pre-filled text
+  -- This allows Tab completion to work properly
+  if prefill and prefill ~= "" then
+    vim.fn.feedkeys(":FrontlineCreateTask " .. prefill .. " ", "n")
+  else
+    vim.fn.feedkeys(":FrontlineCreateTask ", "n")
+  end
 end
 
 return M
