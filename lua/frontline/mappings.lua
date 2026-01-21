@@ -775,6 +775,47 @@ function M.add_annotation()
   end)
 end
 
+-- Copy task description and short UUID to clipboard
+function M.copy_task()
+  local hash = M.get_task_hash_under_cursor()
+  if not hash then
+    return
+  end
+
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+
+  -- Get task information
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
+  local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
+  local exit_code = vim.v.shell_error
+
+  if exit_code ~= 0 then
+    vim.notify("Failed to get task information", vim.log.levels.ERROR)
+    return
+  end
+
+  -- Parse JSON
+  local success, tasks = pcall(vim.fn.json_decode, task_json)
+  if not success or not tasks or #tasks == 0 then
+    vim.notify("Failed to parse task data", vim.log.levels.ERROR)
+    return
+  end
+
+  local task = tasks[1]
+  local description = task.description or "Unknown task"
+  local short_uuid = string.sub(task.uuid, 1, 8)
+
+  -- Format as "description (short_uuid)"
+  local text_to_copy = string.format("%s (%s)", description, short_uuid)
+
+  -- Copy to system clipboard (+ register)
+  vim.fn.setreg('+', text_to_copy)
+
+  vim.notify(string.format("Copied: %s", text_to_copy), vim.log.levels.INFO)
+end
+
 -- Edit task in Taskwarrior's interactive editor
 function M.edit_task()
   local hash = M.get_task_hash_under_cursor()
