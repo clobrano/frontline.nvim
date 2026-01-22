@@ -29,6 +29,7 @@ local config = {
     add_dependency = "<leader>tB",
     undo_task = "<leader>tu",
     create_task = "<leader>tn",
+    copy_task = "<leader>tc",
   },
 }
 
@@ -286,6 +287,12 @@ function M.setup(opts)
       if config.mappings.create_task then
         vim.keymap.set("n", config.mappings.create_task, mappings.create_new_task,
           vim.tbl_extend("force", opts_mapping, { desc = "Create new task with smart pre-fill" }))
+      end
+
+      -- Copy task description and short UUID
+      if config.mappings.copy_task then
+        vim.keymap.set("n", config.mappings.copy_task, mappings.copy_task,
+          vim.tbl_extend("force", opts_mapping, { desc = "Copy task description and short UUID to clipboard" }))
       end
     end,
     group = vim.api.nvim_create_augroup("FrontlineMappings", { clear = true }),
