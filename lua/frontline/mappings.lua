@@ -1162,17 +1162,14 @@ end
 
 -- Select and open URL using the best available picker
 local function select_and_open_url(urls, annotations_map)
-  -- Build display items with annotation context
+  -- Build display items with full annotation context
   local display_items = {}
-  for _, url in ipairs(urls) do
-    local annotation_text = annotations_map[url] or ""
-    -- Truncate annotation text if too long
-    if #annotation_text > 60 then
-      annotation_text = string.sub(annotation_text, 1, 57) .. "..."
-    end
+  for i, url in ipairs(urls) do
+    local annotation_text = annotations_map[url] or url
     table.insert(display_items, {
       url = url,
-      display = string.format("%s  (%s)", url, annotation_text)
+      annotation = annotation_text,
+      index = i,
     })
   end
 
@@ -1191,8 +1188,8 @@ local function select_and_open_url(urls, annotations_map)
         entry_maker = function(entry)
           return {
             value = entry.url,
-            display = entry.display,
-            ordinal = entry.display,
+            display = entry.annotation,
+            ordinal = entry.annotation,
           }
         end,
       }),
@@ -1216,10 +1213,10 @@ local function select_and_open_url(urls, annotations_map)
     -- Create temp table to store URLs for callback
     _G._frontline_url_list = urls
 
-    -- Build source list for fzf
+    -- Build source list for fzf (show full annotation)
     local source = {}
     for i, item in ipairs(display_items) do
-      table.insert(source, string.format("%d. %s", i, item.display))
+      table.insert(source, string.format("%d. %s", i, item.annotation))
     end
 
     -- Use fzf#run with sink function
@@ -1227,7 +1224,7 @@ local function select_and_open_url(urls, annotations_map)
       source = source,
       options = "--prompt='Select URL> '",
       sink = function(selected)
-        -- Extract index from selection (format: "N. url (annotation)")
+        -- Extract index from selection (format: "N. annotation text")
         local idx = tonumber(string.match(selected, "^(%d+)%."))
         if idx and _G._frontline_url_list[idx] then
           open_url_in_browser(_G._frontline_url_list[idx])
@@ -1241,7 +1238,7 @@ local function select_and_open_url(urls, annotations_map)
   -- Fallback to vim.ui.select (works everywhere)
   local choices = {}
   for i, item in ipairs(display_items) do
-    table.insert(choices, string.format("%d. %s", i, item.display))
+    table.insert(choices, string.format("%d. %s", i, item.annotation))
   end
 
   vim.ui.select(choices, {
