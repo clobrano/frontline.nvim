@@ -143,8 +143,9 @@ local function get_incomplete_dependencies(task, workspace_override)
       local success, dep_tasks = pcall(vim.fn.json_decode, dep_json)
       if success and dep_tasks and #dep_tasks > 0 then
         local dep_task = dep_tasks[1]
-        -- Check if dependency is not completed
-        if dep_task.status ~= "completed" then
+        -- Check if dependency is not completed or deleted
+        -- Deleted tasks should not block completion
+        if dep_task.status ~= "completed" and dep_task.status ~= "deleted" then
           table.insert(incomplete_deps, {
             uuid = dep_uuid,
             description = dep_task.description or "Unknown task",
