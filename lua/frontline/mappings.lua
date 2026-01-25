@@ -1112,16 +1112,36 @@ function M.create_new_task()
   end
 end
 
+-- Helper function to clean up URL by removing unbalanced trailing parentheses
+-- This handles markdown link syntax like [text](url) where the trailing ) is not part of the URL
+local function clean_url(url)
+  -- Count opening and closing parentheses in the URL
+  local open_count = 0
+  local close_count = 0
+  for c in url:gmatch(".") do
+    if c == "(" then open_count = open_count + 1 end
+    if c == ")" then close_count = close_count + 1 end
+  end
+
+  -- Strip trailing ) if there are more closing than opening parens
+  while close_count > open_count and url:sub(-1) == ")" do
+    url = url:sub(1, -2)
+    close_count = close_count - 1
+  end
+
+  return url
+end
+
 -- Helper function to extract URLs from text
 local function extract_urls(text)
   local urls = {}
   -- Match common URL patterns (http, https, ftp)
   for url in string.gmatch(text, "https?://[%w%-%.]+[%w%-]+%.[%w]+[%w%-%._~:/?#%[%]@!$&'%(%)%*%+,;=%%]*") do
-    table.insert(urls, url)
+    table.insert(urls, clean_url(url))
   end
   -- Also match ftp URLs
   for url in string.gmatch(text, "ftp://[%w%-%.]+[%w%-]+%.[%w]+[%w%-%._~:/?#%[%]@!$&'%(%)%*%+,;=%%]*") do
-    table.insert(urls, url)
+    table.insert(urls, clean_url(url))
   end
   return urls
 end
