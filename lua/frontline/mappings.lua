@@ -1113,4 +1113,215 @@ function M.create_new_task()
   end
 end
 
+-- Helper function to extract URLs from text
+local function extract_urls(text)
+  local urls = {}
+  -- Match common URL patterns (http, https, ftp)
+  for url in string.gmatch(text, "https?://[%w%-%.]+[%w%-]+%.[%w]+[%w%-%._~:/?#%[%]@!$&'%(%)%*%+,;=%%]*") do
+    table.insert(urls, url)
+  end
+  -- Also match ftp URLs
+  for url in string.gmatch(text, "ftp://[%w%-%.]+[%w%-]+%.[%w]+[%w%-%._~:/?#%[%]@!$&'%(%)%*%+,;=%%]*") do
+    table.insert(urls, url)
+  end
+  return urls
+end
+
+-- Helper function to open URL with platform-specific command
+local function open_url_in_browser(url)
+  local cmd
+  local uname = vim.loop.os_uname().sysname
+
+  if uname == "Darwin" then
+    -- macOS
+    cmd = string.format("open '%s'", url:gsub("'", "'\\''"))
+  elseif uname == "Windows_NT" or uname:match("^MINGW") or uname:match("^MSYS") or uname:match("^CYGWIN") then
+    -- Windows (native or via MINGW/MSYS/Cygwin)
+    -- Use cmd.exe's start command
+    cmd = string.format('cmd.exe /c start "" "%s"', url:gsub('"', '\\"'))
+  else
+    -- Linux and other Unix-like systems
+    cmd = string.format("xdg-open '%s'", url:gsub("'", "'\\''"))
+  end
+
+  -- Run asynchronously to not block Neovim
+  vim.fn.jobstart(cmd, { detach = true })
+  vim.notify(string.format("Opening: %s", url), vim.log.levels.INFO)
+end
+
+-- Helper function to check if a plugin/module is available
+local function is_module_available(name)
+  local ok, _ = pcall(require, name)
+  return ok
+end
+
+-- Helper function to check if fzf.vim is available
+local function is_fzf_vim_available()
+  return vim.fn.exists(':FZF') == 2
+end
+
+-- Select and open URL using the best available picker
+local function select_and_open_url(urls, annotations_map)
+  -- Build display items with annotation context
+  local display_items = {}
+  for _, url in ipairs(urls) do
+    local annotation_text = annotations_map[url] or ""
+    -- Truncate annotation text if too long
+    if #annotation_text > 60 then
+      annotation_text = string.sub(annotation_text, 1, 57) .. "..."
+    end
+    table.insert(display_items, {
+      url = url,
+      display = string.format("%s  (%s)", url, annotation_text)
+    })
+  end
+
+  -- Try Telescope first
+  if is_module_available("telescope") then
+    local pickers = require("telescope.pickers")
+    local finders = require("telescope.finders")
+    local conf = require("telescope.config").values
+    local actions = require("telescope.actions")
+    local action_state = require("telescope.actions.state")
+
+    pickers.new({}, {
+      prompt_title = "Select URL to open",
+      finder = finders.new_table({
+        results = display_items,
+        entry_maker = function(entry)
+          return {
+            value = entry.url,
+            display = entry.display,
+            ordinal = entry.display,
+          }
+        end,
+      }),
+      sorter = conf.generic_sorter({}),
+      attach_mappings = function(prompt_bufnr, map)
+        actions.select_default:replace(function()
+          local selection = action_state.get_selected_entry()
+          actions.close(prompt_bufnr)
+          if selection then
+            open_url_in_browser(selection.value)
+          end
+        end)
+        return true
+      end,
+    }):find()
+    return
+  end
+
+  -- Try fzf.vim
+  if is_fzf_vim_available() then
+    -- Create temp table to store URLs for callback
+    _G._frontline_url_list = urls
+
+    -- Build source list for fzf
+    local source = {}
+    for i, item in ipairs(display_items) do
+      table.insert(source, string.format("%d. %s", i, item.display))
+    end
+
+    -- Use fzf#run with sink function
+    vim.fn["fzf#run"](vim.fn["fzf#wrap"]({
+      source = source,
+      options = "--prompt='Select URL> '",
+      sink = function(selected)
+        -- Extract index from selection (format: "N. url (annotation)")
+        local idx = tonumber(string.match(selected, "^(%d+)%."))
+        if idx and _G._frontline_url_list[idx] then
+          open_url_in_browser(_G._frontline_url_list[idx])
+        end
+        _G._frontline_url_list = nil
+      end
+    }))
+    return
+  end
+
+  -- Fallback to vim.ui.select (works everywhere)
+  local choices = {}
+  for i, item in ipairs(display_items) do
+    table.insert(choices, string.format("%d. %s", i, item.display))
+  end
+
+  vim.ui.select(choices, {
+    prompt = "Select URL to open:",
+    format_item = function(item)
+      return item
+    end
+  }, function(choice, idx)
+    if choice and urls[idx] then
+      open_url_in_browser(urls[idx])
+    end
+  end)
+end
+
+-- Open URL from task annotations
+function M.open_url()
+  local hash = M.get_task_hash_under_cursor()
+  if not hash then
+    return
+  end
+
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+
+  -- Get task information
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
+  local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
+  local exit_code = vim.v.shell_error
+
+  if exit_code ~= 0 then
+    vim.notify("Failed to get task information", vim.log.levels.ERROR)
+    return
+  end
+
+  -- Parse JSON
+  local success, tasks = pcall(vim.fn.json_decode, task_json)
+  if not success or not tasks or #tasks == 0 then
+    vim.notify("Failed to parse task data", vim.log.levels.ERROR)
+    return
+  end
+
+  local task = tasks[1]
+
+  -- Check if there are any annotations
+  if not task.annotations or #task.annotations == 0 then
+    vim.notify("Task has no annotations", vim.log.levels.INFO)
+    return
+  end
+
+  -- Extract all URLs from all annotations
+  local all_urls = {}
+  local url_seen = {}  -- To avoid duplicates
+  local annotations_map = {}  -- Map URL to its annotation text
+
+  for _, annotation in ipairs(task.annotations) do
+    local description = annotation.description or ""
+    local urls = extract_urls(description)
+
+    for _, url in ipairs(urls) do
+      if not url_seen[url] then
+        url_seen[url] = true
+        table.insert(all_urls, url)
+        -- Store the annotation text for context
+        annotations_map[url] = description
+      end
+    end
+  end
+
+  -- Handle based on number of URLs found
+  if #all_urls == 0 then
+    vim.notify("No URLs found in task annotations", vim.log.levels.INFO)
+    return
+  elseif #all_urls == 1 then
+    -- Single URL - open directly
+    open_url_in_browser(all_urls[1])
+  else
+    -- Multiple URLs - use picker
+    select_and_open_url(all_urls, annotations_map)
+  end
+end
+
 return M
