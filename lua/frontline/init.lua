@@ -30,6 +30,7 @@ local config = {
     undo_task = "<leader>tu",
     create_task = "<leader>tn",
     copy_task = "<leader>tc",
+    open_url = "<leader>to",
   },
 }
 
@@ -293,6 +294,12 @@ function M.setup(opts)
       if config.mappings.copy_task then
         vim.keymap.set("n", config.mappings.copy_task, mappings.copy_task,
           vim.tbl_extend("force", opts_mapping, { desc = "Copy task description and short UUID to clipboard" }))
+      end
+
+      -- Open URL from task annotations
+      if config.mappings.open_url then
+        vim.keymap.set("n", config.mappings.open_url, mappings.open_url,
+          vim.tbl_extend("force", opts_mapping, { desc = "Open URL from task annotations" }))
       end
     end,
     group = vim.api.nvim_create_augroup("FrontlineMappings", { clear = true }),
