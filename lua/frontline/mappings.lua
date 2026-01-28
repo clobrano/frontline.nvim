@@ -175,6 +175,31 @@ local function mark_tasks_done(task_uuids, workspace_override)
   return failed
 end
 
+-- Helper to get annotations that start with "TODO:" (case-insensitive)
+local function get_todo_annotations(task)
+  if not task.annotations or #task.annotations == 0 then
+    return nil
+  end
+
+  local todo_annotations = {}
+
+  for _, annotation in ipairs(task.annotations) do
+    local description = annotation.description or ""
+    -- Check if annotation starts with "TODO:" (case-insensitive)
+    if string.match(description:upper(), "^TODO:") then
+      table.insert(todo_annotations, {
+        description = description,
+        entry = annotation.entry
+      })
+    end
+  end
+
+  if #todo_annotations > 0 then
+    return todo_annotations
+  end
+  return nil
+end
+
 -- Toggle task between done and undone
 function M.toggle_done()
   local hash = M.get_task_hash_under_cursor()
@@ -213,6 +238,29 @@ function M.toggle_done()
       require("frontline").refresh_current_buffer()
     end
   else
+    -- Check for TODO annotations if feature is enabled
+    if config.require_todo_annotations_done then
+      local todo_annotations = get_todo_annotations(task)
+      if todo_annotations then
+        -- Build TODO list for display
+        local todo_list = {}
+        for _, todo in ipairs(todo_annotations) do
+          table.insert(todo_list, string.format("  • %s", todo.description))
+        end
+
+        -- Show outstanding TODOs
+        vim.api.nvim_echo({
+          {string.format("Cannot complete task: %d outstanding TODO %s:\n",
+            #todo_annotations, #todo_annotations == 1 and "annotation" or "annotations"), "ErrorMsg"},
+          {table.concat(todo_list, "\n") .. "\n\n", "Normal"},
+          {"Hint: Change 'TODO:' to 'DONE:' in annotations to enable task completion.\n", "WarningMsg"},
+          {"Use " .. (config.mappings.show_annotations or "<leader>ta") .. " to view annotations, then 'task <hash> denotate' and 'task <hash> annotate' to update them.", "Comment"},
+        }, true, {})
+
+        return
+      end
+    end
+
     -- Check for incomplete dependencies before marking as done
     local incomplete_deps = get_incomplete_dependencies(task, workspace)
 
