@@ -239,30 +239,48 @@ function M.toggle_done()
     end
   else
     -- Check for TODO annotations if feature is enabled
+    local todo_annotations = nil
     if config.require_todo_annotations_done then
-      local todo_annotations = get_todo_annotations(task)
-      if todo_annotations then
-        -- Build TODO list for display
-        local todo_list = {}
-        for _, todo in ipairs(todo_annotations) do
-          table.insert(todo_list, string.format("  • %s", todo.description))
-        end
-
-        -- Show outstanding TODOs
-        vim.api.nvim_echo({
-          {string.format("Cannot complete task: %d outstanding TODO %s:\n",
-            #todo_annotations, #todo_annotations == 1 and "annotation" or "annotations"), "ErrorMsg"},
-          {table.concat(todo_list, "\n") .. "\n\n", "Normal"},
-          {"Hint: Change 'TODO:' to 'DONE:' in annotations to enable task completion.\n", "WarningMsg"},
-          {"Use " .. (config.mappings.show_annotations or "<leader>ta") .. " to view annotations, then 'task <hash> denotate' and 'task <hash> annotate' to update them.", "Comment"},
-        }, true, {})
-
-        return
-      end
+      todo_annotations = get_todo_annotations(task)
     end
 
     -- Check for incomplete dependencies before marking as done
     local incomplete_deps = get_incomplete_dependencies(task, workspace)
+
+    -- If TODO annotations exist, block completion (showing dependencies too if present)
+    if todo_annotations then
+      -- Build TODO list for display
+      local todo_list = {}
+      for _, todo in ipairs(todo_annotations) do
+        table.insert(todo_list, string.format("  • %s", todo.description))
+      end
+
+      -- Build echo chunks
+      local echo_chunks = {
+        {string.format("Cannot complete task: %d outstanding TODO %s:\n",
+          #todo_annotations, #todo_annotations == 1 and "annotation" or "annotations"), "ErrorMsg"},
+        {table.concat(todo_list, "\n") .. "\n\n", "Normal"},
+      }
+
+      -- Also show incomplete dependencies if present
+      if incomplete_deps then
+        local dep_list = {}
+        for _, dep in ipairs(incomplete_deps) do
+          table.insert(dep_list, string.format("  • %s (%s)", dep.description, dep.short_hash))
+        end
+
+        table.insert(echo_chunks, {string.format("Task also has %d incomplete %s:\n",
+          #incomplete_deps, #incomplete_deps == 1 and "dependency" or "dependencies"), "WarningMsg"})
+        table.insert(echo_chunks, {table.concat(dep_list, "\n") .. "\n\n", "Normal"})
+      end
+
+      -- Add hint for TODOs
+      table.insert(echo_chunks, {"Hint: Change 'TODO:' to 'DONE:' in annotations to enable task completion.\n", "WarningMsg"})
+      table.insert(echo_chunks, {"Use " .. (config.mappings.show_annotations or "<leader>ta") .. " to view annotations, then 'task <hash> denotate' and 'task <hash> annotate' to update them.", "Comment"})
+
+      vim.api.nvim_echo(echo_chunks, true, {})
+      return
+    end
 
     if incomplete_deps then
       -- Build dependency list for display
