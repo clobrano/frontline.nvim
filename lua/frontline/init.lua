@@ -18,6 +18,7 @@ local config = {
   default_workspace = nil, -- Name of the default workspace (uses system taskwarrior if nil)
   enable_reverse_dependencies = true, -- Enable reverse dependency tracking (anchor icon and "tasks this task is blocking" view)
   reverse_dependencies_warn_threshold = 1000, -- Warn if reverse dependency queries take longer than this (in milliseconds)
+  require_todo_annotations_done = false, -- When true, prevents task completion if there are annotations starting with "TODO:" (must be changed to "DONE:")
   mappings = {
     toggle_done = "<leader>td",
     toggle_started = "<leader>ts",
