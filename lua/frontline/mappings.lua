@@ -1336,15 +1336,64 @@ local function extract_file_paths(text)
   return paths
 end
 
+-- File extensions that should be opened in Neovim instead of external apps
+local text_file_extensions = {
+  -- Markdown and text
+  md = true, markdown = true, txt = true, text = true,
+  -- Org mode and other markup
+  org = true, rst = true, tex = true, adoc = true,
+  -- Code files
+  lua = true, vim = true, py = true, js = true, ts = true, jsx = true, tsx = true,
+  c = true, cpp = true, h = true, hpp = true, cc = true, cxx = true,
+  rs = true, go = true, java = true, kt = true, scala = true,
+  rb = true, pl = true, pm = true, php = true,
+  sh = true, bash = true, zsh = true, fish = true,
+  -- Config and data files
+  json = true, yaml = true, yml = true, toml = true, xml = true,
+  ini = true, conf = true, cfg = true, config = true,
+  -- Web files
+  html = true, htm = true, css = true, scss = true, less = true, sass = true,
+  -- Other text formats
+  csv = true, tsv = true, log = true,
+}
+
+-- Helper function to check if a file should be opened in Neovim
+local function should_open_in_neovim(path)
+  -- URLs should never be opened in Neovim
+  if path:match("^https?://") or path:match("^ftp://") then
+    return false
+  end
+  -- Check file extension
+  local ext = path:match("%.([^%.]+)$")
+  if ext then
+    return text_file_extensions[ext:lower()] == true
+  end
+  return false
+end
+
 -- Helper function to open a resource (URL or file path) with platform-specific command
 local function open_resource(resource)
-  local cmd
-  local uname = vim.loop.os_uname().sysname
-
   -- Expand ~ to home directory for file paths
   if resource:match("^~") then
     resource = resource:gsub("^~", os.getenv("HOME") or "~")
   end
+
+  -- Open text files in Neovim
+  if should_open_in_neovim(resource) then
+    -- Check if file exists before trying to open
+    local stat = vim.loop.fs_stat(resource)
+    if stat then
+      vim.cmd("edit " .. vim.fn.fnameescape(resource))
+      vim.notify(string.format("Opened in Neovim: %s", resource), vim.log.levels.INFO)
+    else
+      vim.notify(string.format("File not found: %s", resource), vim.log.levels.WARN)
+    end
+    return
+  end
+
+  -- Open URLs and non-text files with external application
+  local cmd
+  local uname = vim.loop.os_uname().sysname
 
   if uname == "Darwin" then
     -- macOS
