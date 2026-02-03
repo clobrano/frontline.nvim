@@ -1236,46 +1236,64 @@ local function extract_file_paths(text)
   local paths = {}
   local seen = {}
 
-  -- Pattern for path characters (excluding spaces for simplicity)
-  local path_chars = "[%w%-%._/\\]+"
+  local function add_path(path)
+    local cleaned = clean_file_path(path)
+    if cleaned and cleaned ~= "" and not seen[cleaned] then
+      seen[cleaned] = true
+      table.insert(paths, cleaned)
+    end
+  end
 
-  -- Match Unix absolute paths: /path/to/file
+  -- First, match quoted paths (supports spaces)
+  -- Double-quoted paths: "/path/to/my file.txt"
+  for path in string.gmatch(text, '"(/[^"]+)"') do
+    add_path(path)
+  end
+  for path in string.gmatch(text, '"(~/[^"]+)"') do
+    add_path(path)
+  end
+  for path in string.gmatch(text, '"(%.[%./][^"]+)"') do
+    add_path(path)
+  end
+  for path in string.gmatch(text, '"([A-Za-z]:[^"]+)"') do
+    add_path(path)
+  end
+
+  -- Single-quoted paths: '/path/to/my file.txt'
+  for path in string.gmatch(text, "'(/[^']+)'") do
+    add_path(path)
+  end
+  for path in string.gmatch(text, "'(~/[^']+)'") do
+    add_path(path)
+  end
+  for path in string.gmatch(text, "'(%.[%./][^']+)'") do
+    add_path(path)
+  end
+  for path in string.gmatch(text, "'([A-Za-z]:[^']+)'") do
+    add_path(path)
+  end
+
+  -- Match Unix absolute paths without spaces: /path/to/file
   for path in string.gmatch(text, "/[%w%-%._/]+") do
-    local cleaned = clean_file_path(path)
-    -- Must have at least one path separator after the initial /
-    if cleaned:match("/.+/") or cleaned:match("/[^/]+%.[^/]+$") then
-      if not seen[cleaned] then
-        seen[cleaned] = true
-        table.insert(paths, cleaned)
-      end
+    -- Must have at least one path separator after the initial / or have an extension
+    if path:match("/.+/") or path:match("/[^/]+%.[^/]+$") then
+      add_path(path)
     end
   end
 
-  -- Match home-relative paths: ~/path/to/file
+  -- Match home-relative paths without spaces: ~/path/to/file
   for path in string.gmatch(text, "~/[%w%-%._/]+") do
-    local cleaned = clean_file_path(path)
-    if not seen[cleaned] then
-      seen[cleaned] = true
-      table.insert(paths, cleaned)
-    end
+    add_path(path)
   end
 
-  -- Match Windows absolute paths: C:\path or C:/path
+  -- Match Windows absolute paths without spaces: C:\path or C:/path
   for path in string.gmatch(text, "[A-Za-z]:[/\\][%w%-%._/\\]+") do
-    local cleaned = clean_file_path(path)
-    if not seen[cleaned] then
-      seen[cleaned] = true
-      table.insert(paths, cleaned)
-    end
+    add_path(path)
   end
 
-  -- Match relative paths: ./path or ../path
+  -- Match relative paths without spaces: ./path or ../path
   for path in string.gmatch(text, "%.%.?/[%w%-%._/]+") do
-    local cleaned = clean_file_path(path)
-    if not seen[cleaned] then
-      seen[cleaned] = true
-      table.insert(paths, cleaned)
-    end
+    add_path(path)
   end
 
   return paths
