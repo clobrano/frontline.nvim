@@ -1236,64 +1236,101 @@ local function extract_file_paths(text)
   local paths = {}
   local seen = {}
 
-  local function add_path(path)
+  -- Helper to check if a path looks like it's part of a URL
+  local function is_url_fragment(path)
+    -- Skip paths starting with // (likely from URLs like https://)
+    if path:match("^//") then return true end
+    -- Skip paths containing :// (URL scheme)
+    if path:match("://") then return true end
+    -- Skip if the path contains typical URL-only characters in suspicious positions
+    if path:match("^/[^/]+%.[^/]+/") and path:match("%.com/") then return true end
+    if path:match("%.com/") or path:match("%.org/") or path:match("%.net/") or path:match("%.io/") then return true end
+    return false
+  end
+
+  -- Helper to check if path is a prefix of an already-seen path
+  local function is_prefix_of_existing(path)
+    for existing, _ in pairs(seen) do
+      -- If the existing path starts with this path and is longer, skip this one
+      if existing ~= path and existing:sub(1, #path) == path then
+        return true
+      end
+    end
+    return false
+  end
+
+  local function add_path(path, is_quoted)
     local cleaned = clean_file_path(path)
     if cleaned and cleaned ~= "" and not seen[cleaned] then
+      -- Skip URL fragments for non-quoted paths
+      if not is_quoted and is_url_fragment(cleaned) then
+        return
+      end
       seen[cleaned] = true
       table.insert(paths, cleaned)
     end
   end
 
-  -- First, match quoted paths (supports spaces)
+  -- First, match quoted paths (supports spaces) - these are trusted
   -- Double-quoted paths: "/path/to/my file.txt"
   for path in string.gmatch(text, '"(/[^"]+)"') do
-    add_path(path)
+    add_path(path, true)
   end
   for path in string.gmatch(text, '"(~/[^"]+)"') do
-    add_path(path)
+    add_path(path, true)
   end
   for path in string.gmatch(text, '"(%.[%./][^"]+)"') do
-    add_path(path)
+    add_path(path, true)
   end
   for path in string.gmatch(text, '"([A-Za-z]:[^"]+)"') do
-    add_path(path)
+    add_path(path, true)
   end
 
   -- Single-quoted paths: '/path/to/my file.txt'
   for path in string.gmatch(text, "'(/[^']+)'") do
-    add_path(path)
+    add_path(path, true)
   end
   for path in string.gmatch(text, "'(~/[^']+)'") do
-    add_path(path)
+    add_path(path, true)
   end
   for path in string.gmatch(text, "'(%.[%./][^']+)'") do
-    add_path(path)
+    add_path(path, true)
   end
   for path in string.gmatch(text, "'([A-Za-z]:[^']+)'") do
-    add_path(path)
+    add_path(path, true)
   end
 
   -- Match Unix absolute paths without spaces: /path/to/file
   for path in string.gmatch(text, "/[%w%-%._/]+") do
     -- Must have at least one path separator after the initial / or have an extension
     if path:match("/.+/") or path:match("/[^/]+%.[^/]+$") then
-      add_path(path)
+      -- Skip if this is a prefix of an already-added quoted path
+      if not is_prefix_of_existing(path) then
+        add_path(path, false)
+      end
     end
   end
 
   -- Match home-relative paths without spaces: ~/path/to/file
   for path in string.gmatch(text, "~/[%w%-%._/]+") do
-    add_path(path)
+    if not is_prefix_of_existing(path) then
+      add_path(path, false)
+    end
   end
 
   -- Match Windows absolute paths without spaces: C:\path or C:/path
-  for path in string.gmatch(text, "[A-Za-z]:[/\\][%w%-%._/\\]+") do
-    add_path(path)
+  -- Use word boundary to avoid matching URL schemes like "https:"
+  for path in string.gmatch(text, "%f[%w][A-Za-z]:[/\\][%w%-%._/\\]+") do
+    if not is_prefix_of_existing(path) then
+      add_path(path, false)
+    end
   end
 
   -- Match relative paths without spaces: ./path or ../path
   for path in string.gmatch(text, "%.%.?/[%w%-%._/]+") do
-    add_path(path)
+    if not is_prefix_of_existing(path) then
+      add_path(path, false)
+    end
   end
 
   return paths
