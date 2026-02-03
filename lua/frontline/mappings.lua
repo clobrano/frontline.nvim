@@ -1213,26 +1213,99 @@ local function extract_urls(text)
   return urls
 end
 
--- Helper function to open URL with platform-specific command
-local function open_url_in_browser(url)
+-- Helper function to clean file path by removing trailing punctuation
+local function clean_file_path(path)
+  -- Remove trailing punctuation that's likely not part of the path
+  path = path:gsub("[,;:!?]+$", "")
+  -- Handle markdown link syntax - remove unbalanced trailing parentheses
+  local open_count = 0
+  local close_count = 0
+  for c in path:gmatch(".") do
+    if c == "(" then open_count = open_count + 1 end
+    if c == ")" then close_count = close_count + 1 end
+  end
+  while close_count > open_count and path:sub(-1) == ")" do
+    path = path:sub(1, -2)
+    close_count = close_count - 1
+  end
+  return path
+end
+
+-- Helper function to extract file paths from text
+local function extract_file_paths(text)
+  local paths = {}
+  local seen = {}
+
+  -- Pattern for path characters (excluding spaces for simplicity)
+  local path_chars = "[%w%-%._/\\]+"
+
+  -- Match Unix absolute paths: /path/to/file
+  for path in string.gmatch(text, "/[%w%-%._/]+") do
+    local cleaned = clean_file_path(path)
+    -- Must have at least one path separator after the initial /
+    if cleaned:match("/.+/") or cleaned:match("/[^/]+%.[^/]+$") then
+      if not seen[cleaned] then
+        seen[cleaned] = true
+        table.insert(paths, cleaned)
+      end
+    end
+  end
+
+  -- Match home-relative paths: ~/path/to/file
+  for path in string.gmatch(text, "~/[%w%-%._/]+") do
+    local cleaned = clean_file_path(path)
+    if not seen[cleaned] then
+      seen[cleaned] = true
+      table.insert(paths, cleaned)
+    end
+  end
+
+  -- Match Windows absolute paths: C:\path or C:/path
+  for path in string.gmatch(text, "[A-Za-z]:[/\\][%w%-%._/\\]+") do
+    local cleaned = clean_file_path(path)
+    if not seen[cleaned] then
+      seen[cleaned] = true
+      table.insert(paths, cleaned)
+    end
+  end
+
+  -- Match relative paths: ./path or ../path
+  for path in string.gmatch(text, "%.%.?/[%w%-%._/]+") do
+    local cleaned = clean_file_path(path)
+    if not seen[cleaned] then
+      seen[cleaned] = true
+      table.insert(paths, cleaned)
+    end
+  end
+
+  return paths
+end
+
+-- Helper function to open a resource (URL or file path) with platform-specific command
+local function open_resource(resource)
   local cmd
   local uname = vim.loop.os_uname().sysname
 
+  -- Expand ~ to home directory for file paths
+  if resource:match("^~") then
+    resource = resource:gsub("^~", os.getenv("HOME") or "~")
+  end
+
   if uname == "Darwin" then
     -- macOS
-    cmd = string.format("open '%s'", url:gsub("'", "'\\''"))
+    cmd = string.format("open '%s'", resource:gsub("'", "'\\''"))
   elseif uname == "Windows_NT" or uname:match("^MINGW") or uname:match("^MSYS") or uname:match("^CYGWIN") then
     -- Windows (native or via MINGW/MSYS/Cygwin)
     -- Use cmd.exe's start command
-    cmd = string.format('cmd.exe /c start "" "%s"', url:gsub('"', '\\"'))
+    cmd = string.format('cmd.exe /c start "" "%s"', resource:gsub('"', '\\"'))
   else
     -- Linux and other Unix-like systems
-    cmd = string.format("xdg-open '%s'", url:gsub("'", "'\\''"))
+    cmd = string.format("xdg-open '%s'", resource:gsub("'", "'\\''"))
   end
 
   -- Run asynchronously to not block Neovim
   vim.fn.jobstart(cmd, { detach = true })
-  vim.notify(string.format("Opening: %s", url), vim.log.levels.INFO)
+  vim.notify(string.format("Opening: %s", resource), vim.log.levels.INFO)
 end
 
 -- Helper function to check if a plugin/module is available
@@ -1246,14 +1319,14 @@ local function is_fzf_vim_available()
   return vim.fn.exists(':FZF') == 2
 end
 
--- Select and open URL using the best available picker
-local function select_and_open_url(urls, annotations_map)
+-- Select and open a resource (URL or file path) using the best available picker
+local function select_and_open_resource(resources, annotations_map)
   -- Build display items with full annotation context
   local display_items = {}
-  for i, url in ipairs(urls) do
-    local annotation_text = annotations_map[url] or url
+  for i, resource in ipairs(resources) do
+    local annotation_text = annotations_map[resource] or resource
     table.insert(display_items, {
-      url = url,
+      resource = resource,
       annotation = annotation_text,
       index = i,
     })
@@ -1268,12 +1341,12 @@ local function select_and_open_url(urls, annotations_map)
     local action_state = require("telescope.actions.state")
 
     pickers.new({}, {
-      prompt_title = "Select URL to open",
+      prompt_title = "Select resource to open",
       finder = finders.new_table({
         results = display_items,
         entry_maker = function(entry)
           return {
-            value = entry.url,
+            value = entry.resource,
             display = entry.annotation,
             ordinal = entry.annotation,
           }
@@ -1285,7 +1358,7 @@ local function select_and_open_url(urls, annotations_map)
           local selection = action_state.get_selected_entry()
           actions.close(prompt_bufnr)
           if selection then
-            open_url_in_browser(selection.value)
+            open_resource(selection.value)
           end
         end)
         return true
@@ -1296,8 +1369,8 @@ local function select_and_open_url(urls, annotations_map)
 
   -- Try fzf.vim
   if is_fzf_vim_available() then
-    -- Create temp table to store URLs for callback
-    _G._frontline_url_list = urls
+    -- Create temp table to store resources for callback
+    _G._frontline_resource_list = resources
 
     -- Build source list for fzf (show full annotation)
     local source = {}
@@ -1308,14 +1381,14 @@ local function select_and_open_url(urls, annotations_map)
     -- Use fzf#run with sink function
     vim.fn["fzf#run"](vim.fn["fzf#wrap"]({
       source = source,
-      options = "--prompt='Select URL> '",
+      options = "--prompt='Select resource> '",
       sink = function(selected)
         -- Extract index from selection (format: "N. annotation text")
         local idx = tonumber(string.match(selected, "^(%d+)%."))
-        if idx and _G._frontline_url_list[idx] then
-          open_url_in_browser(_G._frontline_url_list[idx])
+        if idx and _G._frontline_resource_list[idx] then
+          open_resource(_G._frontline_resource_list[idx])
         end
-        _G._frontline_url_list = nil
+        _G._frontline_resource_list = nil
       end
     }))
     return
@@ -1328,18 +1401,18 @@ local function select_and_open_url(urls, annotations_map)
   end
 
   vim.ui.select(choices, {
-    prompt = "Select URL to open:",
+    prompt = "Select resource to open:",
     format_item = function(item)
       return item
     end
   }, function(choice, idx)
-    if choice and urls[idx] then
-      open_url_in_browser(urls[idx])
+    if choice and resources[idx] then
+      open_resource(resources[idx])
     end
   end)
 end
 
--- Open URL from task annotations
+-- Open URL or file path from task annotations
 function M.open_url()
   local hash = M.get_task_hash_under_cursor()
   if not hash then
@@ -1375,35 +1448,45 @@ function M.open_url()
     return
   end
 
-  -- Extract all URLs from all annotations
-  local all_urls = {}
-  local url_seen = {}  -- To avoid duplicates
-  local annotations_map = {}  -- Map URL to its annotation text
+  -- Extract all URLs and file paths from all annotations
+  local all_resources = {}
+  local resource_seen = {}  -- To avoid duplicates
+  local annotations_map = {}  -- Map resource to its annotation text
 
   for _, annotation in ipairs(task.annotations) do
     local description = annotation.description or ""
-    local urls = extract_urls(description)
 
+    -- Extract URLs
+    local urls = extract_urls(description)
     for _, url in ipairs(urls) do
-      if not url_seen[url] then
-        url_seen[url] = true
-        table.insert(all_urls, url)
-        -- Store the annotation text for context
+      if not resource_seen[url] then
+        resource_seen[url] = true
+        table.insert(all_resources, url)
         annotations_map[url] = description
+      end
+    end
+
+    -- Extract file paths
+    local paths = extract_file_paths(description)
+    for _, path in ipairs(paths) do
+      if not resource_seen[path] then
+        resource_seen[path] = true
+        table.insert(all_resources, path)
+        annotations_map[path] = description
       end
     end
   end
 
-  -- Handle based on number of URLs found
-  if #all_urls == 0 then
-    vim.notify("No URLs found in task annotations", vim.log.levels.INFO)
+  -- Handle based on number of resources found
+  if #all_resources == 0 then
+    vim.notify("No URLs or file paths found in task annotations", vim.log.levels.INFO)
     return
-  elseif #all_urls == 1 then
-    -- Single URL - open directly
-    open_url_in_browser(all_urls[1])
+  elseif #all_resources == 1 then
+    -- Single resource - open directly
+    open_resource(all_resources[1])
   else
-    -- Multiple URLs - use picker
-    select_and_open_url(all_urls, annotations_map)
+    -- Multiple resources - use picker
+    select_and_open_resource(all_resources, annotations_map)
   end
 end
 
