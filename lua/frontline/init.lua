@@ -155,6 +155,11 @@ local function refresh_tasks()
       end
     end
 
+    -- Sort tasks by urgency (highest first)
+    table.sort(tasks, function(a, b)
+      return (a.urgency or 0) > (b.urgency or 0)
+    end)
+
     local formatted_tasks = {}
     for _, task in ipairs(tasks) do
       table.insert(formatted_tasks, renderer.format_task(task, config.convert_dates_to_local))
