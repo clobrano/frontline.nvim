@@ -243,6 +243,67 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
     assert.truthy(string.find(buffer_lines[2], "Standalone task"), "Output should contain task description")
   end)
 
+  it("should sort tasks by urgency (highest first)", function()
+    local initial_content = {
+      "# My Tasks | status:pending",
+      "",
+    }
+    test_utils.set_mock_buffer_content(initial_content)
+
+    -- Return tasks with different urgency values, in non-sorted order
+    local mock_task_output = vim.fn.json_encode({
+      {id=1, description="Low urgency task", status="pending", uuid="lowurg1111111111", urgency=1.5},
+      {id=2, description="High urgency task", status="pending", uuid="highurg222222222", urgency=19.7},
+      {id=3, description="Medium urgency task", status="pending", uuid="medurg3333333333", urgency=8.2},
+    })
+
+    task_client._set_run_shell_command_mock(function(cmd)
+      if string.find(cmd, "status:pending") then
+        return mock_task_output, 0
+      elseif string.find(cmd, "depends.any:") then
+        return '[]', 0
+      end
+      return '[]', 0
+    end)
+
+    plugin.refresh_current_buffer()
+
+    local buffer_lines = test_utils.mock_buffer_content
+    -- Tasks should be sorted: high (19.7), medium (8.2), low (1.5)
+    assert.truthy(string.find(buffer_lines[2], "High urgency task"), "First task should be highest urgency")
+    assert.truthy(string.find(buffer_lines[3], "Medium urgency task"), "Second task should be medium urgency")
+    assert.truthy(string.find(buffer_lines[4], "Low urgency task"), "Third task should be lowest urgency")
+  end)
+
+  it("should sort tasks with missing urgency field last", function()
+    local initial_content = {
+      "# My Tasks | status:pending",
+      "",
+    }
+    test_utils.set_mock_buffer_content(initial_content)
+
+    local mock_task_output = vim.fn.json_encode({
+      {id=1, description="No urgency task", status="pending", uuid="nourg11111111111"},
+      {id=2, description="Has urgency task", status="pending", uuid="hasurg2222222222", urgency=5.0},
+    })
+
+    task_client._set_run_shell_command_mock(function(cmd)
+      if string.find(cmd, "status:pending") then
+        return mock_task_output, 0
+      elseif string.find(cmd, "depends.any:") then
+        return '[]', 0
+      end
+      return '[]', 0
+    end)
+
+    plugin.refresh_current_buffer()
+
+    local buffer_lines = test_utils.mock_buffer_content
+    -- Task with urgency should come first, task without urgency last
+    assert.truthy(string.find(buffer_lines[2], "Has urgency task"), "Task with urgency should come first")
+    assert.truthy(string.find(buffer_lines[3], "No urgency task"), "Task without urgency should come last")
+  end)
+
   it("should show both lock and anchor icons when task has both dependency types", function()
     test_utils.set_mock_buffer_content({
       "# My Tasks | status:pending",
