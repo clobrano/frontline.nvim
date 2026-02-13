@@ -61,14 +61,53 @@ describe("Renderer Module", function()
         assert.are.same(expected, renderer.format_task(task))
       end)
     
-      it("should format a completed task correctly", function()
+      it("should format a completed task with description in curly brackets", function()
         local task = {
           id = 3,
           description = "Test Completed Task",
           status = "completed",
           uuid = "1234567890abcdef",
         }
-        local expected = "* [x] Test Completed Task (12345678)"
+        local expected = "* [x] {Test Completed Task} (12345678)"
+        assert.are.same(expected, renderer.format_task(task))
+      end)
+
+      it("should format a completed task with end date in curly brackets", function()
+        local task = {
+          id = 31,
+          description = "Completed with End Date",
+          status = "completed",
+          uuid = "enddate123456789",
+          ["end"] = "20260115T143000Z",
+        }
+        local expected = "* [x] {Completed with End Date " .. convert_iso_to_local("20260115T143000Z") .. "} (enddate1)"
+        assert.are.same(expected, renderer.format_task(task))
+      end)
+
+      it("should not show scheduled date for completed tasks", function()
+        local task = {
+          id = 32,
+          description = "Completed with Scheduled",
+          status = "completed",
+          uuid = "compscheduled001",
+          scheduled = "20260110T090000Z",
+          ["end"] = "20260115T143000Z",
+        }
+        local expected = "* [x] {Completed with Scheduled " .. convert_iso_to_local("20260115T143000Z") .. "} (compsche)"
+        assert.are.same(expected, renderer.format_task(task))
+      end)
+
+      it("should show due date but not scheduled date for completed tasks", function()
+        local task = {
+          id = 33,
+          description = "Completed with All Dates",
+          status = "completed",
+          uuid = "compalldates0001",
+          scheduled = "20260110T090000Z",
+          due = "20260120T000000Z",
+          ["end"] = "20260115T143000Z",
+        }
+        local expected = "* [x] {Completed with All Dates " .. convert_iso_to_local("20260115T143000Z") .. "} [" .. convert_iso_to_local("20260120T000000Z") .. "] (compalld)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
