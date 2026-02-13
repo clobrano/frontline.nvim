@@ -175,7 +175,20 @@ local function mark_tasks_done(task_uuids, workspace_override)
   return failed
 end
 
--- Helper to get annotations that start with "TODO:" (case-insensitive)
+-- Helper to check if an annotation is an incomplete TODO.
+-- Matches annotations starting with "TODO:" (case-insensitive) or markdown
+-- checkboxes "[ ]". The done equivalents are "DONE:" and "[x]"/"[X]".
+local function is_todo_annotation(description)
+  if string.match(description:upper(), "^TODO:") then
+    return true
+  end
+  -- Match markdown checkbox: "[ ] ..." (unchecked)
+  if string.match(description, "^%[ %]") then
+    return true
+  end
+  return false
+end
+
 local function get_todo_annotations(task)
   if not task.annotations or #task.annotations == 0 then
     return nil
@@ -185,8 +198,7 @@ local function get_todo_annotations(task)
 
   for _, annotation in ipairs(task.annotations) do
     local description = annotation.description or ""
-    -- Check if annotation starts with "TODO:" (case-insensitive)
-    if string.match(description:upper(), "^TODO:") then
+    if is_todo_annotation(description) then
       table.insert(todo_annotations, {
         description = description,
         entry = annotation.entry
@@ -275,7 +287,7 @@ function M.toggle_done()
       end
 
       -- Add hint for TODOs
-      table.insert(echo_chunks, {"Hint: Change 'TODO:' to 'DONE:' in annotations to enable task completion.\n", "WarningMsg"})
+      table.insert(echo_chunks, {"Hint: Change 'TODO:' to 'DONE:' (or '[ ]' to '[x]') in annotations to enable task completion.\n", "WarningMsg"})
       table.insert(echo_chunks, {"Use " .. (config.mappings.show_annotations or "<leader>ta") .. " to view annotations, then 'task <hash> denotate' and 'task <hash> annotate' to update them.", "Comment"})
 
       vim.api.nvim_echo(echo_chunks, true, {})
