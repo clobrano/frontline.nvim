@@ -75,6 +75,14 @@ local function format_due_date(task, convert_to_local)
   return ""
 end
 
+-- Helper to format end date for completed tasks
+local function format_end_date(task, convert_to_local)
+  if task["end"] then
+    return parse_iso_date(task["end"], convert_to_local)
+  end
+  return ""
+end
+
 -- Helper to get status indicator
 local function get_status_indicator(task)
   if task.status == "completed" then
@@ -134,16 +142,29 @@ function M.format_task(task, convert_to_local)
 
   local status = get_status_indicator(task)
   local description = task.description or ""
-  local scheduled_str = format_scheduled_date(task, convert_to_local)
   local due_date_str = format_due_date(task, convert_to_local)
   local extra_icons_str = get_extra_icons(task)
   local short_hash = string.sub(task.uuid or "", 1, 8)
 
+  -- For completed tasks, wrap description and end date in curly brackets
+  -- and skip the scheduled date
+  if task.status == "completed" then
+    local end_date_str = format_end_date(task, convert_to_local)
+    if end_date_str ~= "" then
+      description = string.format("{%s %s}", description, end_date_str)
+    else
+      description = string.format("{%s}", description)
+    end
+  end
+
   local parts = {"*", status, description}
 
-  -- Add scheduled date first (rounded parenthesis)
-  if scheduled_str ~= "" then
-    table.insert(parts, scheduled_str)
+  -- Add scheduled date first (rounded parenthesis), but not for completed tasks
+  if task.status ~= "completed" then
+    local scheduled_str = format_scheduled_date(task, convert_to_local)
+    if scheduled_str ~= "" then
+      table.insert(parts, scheduled_str)
+    end
   end
 
   -- Add due date (squared brackets)
