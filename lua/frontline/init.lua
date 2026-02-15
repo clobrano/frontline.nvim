@@ -33,7 +33,7 @@ local config = {
     create_task = "<leader>tn",
     copy_task = "<leader>tc",
     open_url = "<leader>to",
-    create_note = "<leader>tN",
+    create_note = "<leader>tj",
   },
 }
 
