@@ -1590,7 +1590,7 @@ function M.create_note()
   local notes_dir = nil
 
   -- Check per-workspace notes_directory first
-  local ws_name = frontline.get_current_workspace()
+  local ws_name = frontline.get_current_workspace() or config.default_workspace
   if ws_name then
     local cfg = frontline.get_config()
     if cfg and cfg.workspaces and cfg.workspaces[ws_name] then
