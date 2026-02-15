@@ -11,15 +11,16 @@ local config = {
   newlines_after_tasks = 2,
   convert_dates_to_local = true, -- Convert UTC timestamps to local time using system date command (default: true)
   workspaces = {
-    -- Example configuration:
+    -- Example configuration (string shorthand):
     -- personal = "~/.config/taskwarrior/personal/.taskrc",
-    -- work = "~/.config/taskwarrior/work/.taskrc",
+    -- Example configuration (table form with per-workspace notes directory):
+    -- work = { rc = "~/.config/taskwarrior/work/.taskrc", notes_directory = "~/notes/work" },
   },
   default_workspace = nil, -- Name of the default workspace (uses system taskwarrior if nil)
   enable_reverse_dependencies = true, -- Enable reverse dependency tracking (anchor icon and "tasks this task is blocking" view)
   reverse_dependencies_warn_threshold = 1000, -- Warn if reverse dependency queries take longer than this (in milliseconds)
   require_todo_annotations_done = true, -- Prevents task completion if there are annotations starting with "TODO:" or "[ ]" (must be changed to "DONE:" or "[x]")
-  notes_directory = nil, -- Default directory for markdown notes created from tasks (nil = current working directory)
+  notes_directory = nil, -- Fallback directory for markdown notes (nil = cwd). Overridden by per-workspace notes_directory.
   mappings = {
     toggle_done = "<leader>td",
     toggle_started = "<leader>ts",
@@ -40,14 +41,33 @@ local config = {
 -- Current workspace context (tracked per buffer)
 local current_workspace = nil
 
+-- Helper: extract rc path from a workspace entry (string or table)
+local function resolve_workspace_rc(entry)
+  if type(entry) == "string" then
+    return vim.fn.expand(entry)
+  elseif type(entry) == "table" and entry.rc then
+    return vim.fn.expand(entry.rc)
+  end
+  return nil
+end
+
+-- Helper: extract notes_directory from a workspace entry (table form only)
+local function resolve_workspace_notes_dir(entry)
+  if type(entry) == "table" and entry.notes_directory then
+    return vim.fn.expand(entry.notes_directory)
+  end
+  return nil
+end
+
 -- Helper function to get workspace rc file path
 local function get_workspace_rc(workspace_name)
   if not workspace_name or workspace_name == "" then
     return nil
   end
 
-  if config.workspaces[workspace_name] then
-    return vim.fn.expand(config.workspaces[workspace_name])
+  local entry = config.workspaces[workspace_name]
+  if entry then
+    return resolve_workspace_rc(entry)
   end
 
   vim.notify(string.format("Unknown workspace: %s", workspace_name), vim.log.levels.WARN)
@@ -68,6 +88,10 @@ end
 function M.get_config()
   return config
 end
+
+-- Expose workspace helpers for other modules
+M.resolve_workspace_rc = resolve_workspace_rc
+M.resolve_workspace_notes_dir = resolve_workspace_notes_dir
 
 -- Expose config for completion module
 M.config = config
