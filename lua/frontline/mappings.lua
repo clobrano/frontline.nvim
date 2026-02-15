@@ -1586,20 +1586,14 @@ function M.create_note()
   end
 
   -- Determine the notes directory: per-workspace > global > cwd
-  local frontline = require("frontline")
   local notes_dir = nil
 
   -- Check per-workspace notes_directory first
-  local ws_name = frontline.get_current_workspace() or config.default_workspace
-  -- DEBUG: trace notes directory resolution
-  vim.notify(string.format("DEBUG create_note: ws_name=%s", tostring(ws_name)), vim.log.levels.INFO)
+  local ws_name = require("frontline").get_current_workspace()
   if ws_name then
-    local cfg = frontline.get_config()
-    local entry = cfg and cfg.workspaces and cfg.workspaces[ws_name]
-    vim.notify(string.format("DEBUG create_note: entry type=%s, entry=%s", type(entry), vim.inspect(entry)), vim.log.levels.INFO)
-    if entry then
-      notes_dir = frontline.resolve_workspace_notes_dir(entry)
-      vim.notify(string.format("DEBUG create_note: resolved notes_dir=%s", tostring(notes_dir)), vim.log.levels.INFO)
+    local ws_entry = config.workspaces and config.workspaces[ws_name]
+    if type(ws_entry) == "table" and ws_entry.notes_directory then
+      notes_dir = vim.fn.expand(ws_entry.notes_directory)
     end
   end
 
