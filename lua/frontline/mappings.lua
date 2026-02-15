@@ -1609,13 +1609,13 @@ function M.create_note()
     return
   end
 
-  -- Build note content with frontmatter
+  -- Build note content with title and frontmatter below
   local today = os.date("%Y-%m-%d")
   local content = string.format(
-    "---\nCreated: %s\nTask: (%s)\n---\n\n# %s\n",
+    "# %s\n\n---\nCreated: %s\nTask: (%s)\n---\n",
+    description,
     today,
-    short_uuid,
-    description
+    short_uuid
   )
 
   -- Write the file
