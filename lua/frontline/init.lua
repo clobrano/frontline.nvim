@@ -19,6 +19,7 @@ local config = {
   enable_reverse_dependencies = true, -- Enable reverse dependency tracking (anchor icon and "tasks this task is blocking" view)
   reverse_dependencies_warn_threshold = 1000, -- Warn if reverse dependency queries take longer than this (in milliseconds)
   require_todo_annotations_done = true, -- Prevents task completion if there are annotations starting with "TODO:" or "[ ]" (must be changed to "DONE:" or "[x]")
+  notes_directory = nil, -- Default directory for markdown notes created from tasks (nil = current working directory)
   mappings = {
     toggle_done = "<leader>td",
     toggle_started = "<leader>ts",
@@ -32,6 +33,7 @@ local config = {
     create_task = "<leader>tn",
     copy_task = "<leader>tc",
     open_url = "<leader>to",
+    create_note = "<leader>tN",
   },
 }
 
@@ -306,6 +308,12 @@ function M.setup(opts)
       if config.mappings.open_url then
         vim.keymap.set("n", config.mappings.open_url, mappings.open_url,
           vim.tbl_extend("force", opts_mapping, { desc = "Open URL from task annotations" }))
+      end
+
+      -- Create markdown note from task
+      if config.mappings.create_note then
+        vim.keymap.set("n", config.mappings.create_note, mappings.create_note,
+          vim.tbl_extend("force", opts_mapping, { desc = "Create markdown note from task" }))
       end
     end,
     group = vim.api.nvim_create_augroup("FrontlineMappings", { clear = true }),
