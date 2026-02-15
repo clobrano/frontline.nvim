@@ -146,14 +146,12 @@ function M.format_task(task, convert_to_local)
   local extra_icons_str = get_extra_icons(task)
   local short_hash = string.sub(task.uuid or "", 1, 8)
 
-  -- For completed tasks, wrap description and end date in curly brackets
+  -- For completed tasks, append end date in curly brackets after the description
   -- and skip the scheduled date
   if task.status == "completed" then
     local end_date_str = format_end_date(task, convert_to_local)
     if end_date_str ~= "" then
-      description = string.format("{%s %s}", description, end_date_str)
-    else
-      description = string.format("{%s}", description)
+      description = string.format("%s {%s}", description, end_date_str)
     end
   end
 

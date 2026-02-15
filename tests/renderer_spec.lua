@@ -61,14 +61,14 @@ describe("Renderer Module", function()
         assert.are.same(expected, renderer.format_task(task))
       end)
     
-      it("should format a completed task with description in curly brackets", function()
+      it("should format a completed task without end date normally", function()
         local task = {
           id = 3,
           description = "Test Completed Task",
           status = "completed",
           uuid = "1234567890abcdef",
         }
-        local expected = "* [x] {Test Completed Task} (12345678)"
+        local expected = "* [x] Test Completed Task (12345678)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -80,7 +80,7 @@ describe("Renderer Module", function()
           uuid = "enddate123456789",
           ["end"] = "20260115T143000Z",
         }
-        local expected = "* [x] {Completed with End Date " .. convert_iso_to_local("20260115T143000Z") .. "} (enddate1)"
+        local expected = "* [x] Completed with End Date {" .. convert_iso_to_local("20260115T143000Z") .. "} (enddate1)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -93,7 +93,7 @@ describe("Renderer Module", function()
           scheduled = "20260110T090000Z",
           ["end"] = "20260115T143000Z",
         }
-        local expected = "* [x] {Completed with Scheduled " .. convert_iso_to_local("20260115T143000Z") .. "} (compsche)"
+        local expected = "* [x] Completed with Scheduled {" .. convert_iso_to_local("20260115T143000Z") .. "} (compsche)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -107,7 +107,7 @@ describe("Renderer Module", function()
           due = "20260120T000000Z",
           ["end"] = "20260115T143000Z",
         }
-        local expected = "* [x] {Completed with All Dates " .. convert_iso_to_local("20260115T143000Z") .. "} [" .. convert_iso_to_local("20260120T000000Z") .. "] (compalld)"
+        local expected = "* [x] Completed with All Dates {" .. convert_iso_to_local("20260115T143000Z") .. "} [" .. convert_iso_to_local("20260120T000000Z") .. "] (compalld)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
