@@ -230,7 +230,7 @@ local function parse_workspace_from_cmdline(cmdline)
   -- Get the workspace rc file path
   local frontline = require("frontline")
   if frontline.config and frontline.config.workspaces and frontline.config.workspaces[workspace_name] then
-    local workspace_rc = vim.fn.expand(frontline.config.workspaces[workspace_name])
+    local workspace_rc = frontline.resolve_workspace_rc(frontline.config.workspaces[workspace_name])
     return workspace_name, workspace_rc
   end
 
@@ -263,7 +263,7 @@ function M.complete_task_input(arglead, cmdline, cursorpos)
       local frontline = require("frontline")
       local current_workspace = frontline.get_current_workspace()
       if current_workspace and frontline.config.workspaces and frontline.config.workspaces[current_workspace] then
-        workspace_rc = vim.fn.expand(frontline.config.workspaces[current_workspace])
+        workspace_rc = frontline.resolve_workspace_rc(frontline.config.workspaces[current_workspace])
       end
     end
 
@@ -277,7 +277,7 @@ function M.complete_task_input(arglead, cmdline, cursorpos)
       local frontline = require("frontline")
       local current_workspace = frontline.get_current_workspace()
       if current_workspace and frontline.config.workspaces and frontline.config.workspaces[current_workspace] then
-        workspace_rc = vim.fn.expand(frontline.config.workspaces[current_workspace])
+        workspace_rc = frontline.resolve_workspace_rc(frontline.config.workspaces[current_workspace])
       end
     end
 

@@ -36,10 +36,9 @@ local function get_workspace_rc()
     return nil
   end
 
-  -- Access the config to get workspace rc path
-  local config = frontline.get_config()
-  if config and config.workspaces and config.workspaces[workspace] then
-    return vim.fn.expand(config.workspaces[workspace])
+  local cfg = frontline.get_config()
+  if cfg and cfg.workspaces and cfg.workspaces[workspace] then
+    return frontline.resolve_workspace_rc(cfg.workspaces[workspace])
   end
 
   return nil
@@ -69,7 +68,7 @@ end
 -- Helper function to get workspace rc path, with optional override
 local function get_workspace_rc_with_override(workspace_override)
   local frontline = require("frontline")
-  local config = frontline.get_config()
+  local cfg = frontline.get_config()
 
   -- Use override if provided, otherwise use current workspace
   local workspace = workspace_override or frontline.get_current_workspace()
@@ -78,8 +77,8 @@ local function get_workspace_rc_with_override(workspace_override)
     return nil
   end
 
-  if config and config.workspaces and config.workspaces[workspace] then
-    return vim.fn.expand(config.workspaces[workspace])
+  if cfg and cfg.workspaces and cfg.workspaces[workspace] then
+    return frontline.resolve_workspace_rc(cfg.workspaces[workspace])
   end
 
   if workspace_override then
@@ -1586,12 +1585,26 @@ function M.create_note()
     end
   end
 
-  -- Determine the notes directory
-  local notes_dir = config.notes_directory
-  if notes_dir then
-    notes_dir = vim.fn.expand(notes_dir)
-  else
-    notes_dir = vim.fn.getcwd()
+  -- Determine the notes directory: per-workspace > global > cwd
+  local frontline = require("frontline")
+  local notes_dir = nil
+
+  -- Check per-workspace notes_directory first
+  local ws_name = frontline.get_current_workspace()
+  if ws_name then
+    local cfg = frontline.get_config()
+    if cfg and cfg.workspaces and cfg.workspaces[ws_name] then
+      notes_dir = frontline.resolve_workspace_notes_dir(cfg.workspaces[ws_name])
+    end
+  end
+
+  -- Fall back to global notes_directory, then cwd
+  if not notes_dir then
+    if config.notes_directory then
+      notes_dir = vim.fn.expand(config.notes_directory)
+    else
+      notes_dir = vim.fn.getcwd()
+    end
   end
 
   -- Ensure directory exists
