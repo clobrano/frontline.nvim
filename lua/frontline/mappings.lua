@@ -1528,6 +1528,121 @@ local function select_and_open_resource(resources, annotations_map)
   end)
 end
 
+-- Helper function to sanitize a string for use as a filename
+local function sanitize_filename(str)
+  -- Replace spaces and special characters with hyphens
+  local sanitized = str:gsub("[^%w%-_%.]+", "-")
+  -- Remove leading/trailing hyphens
+  sanitized = sanitized:gsub("^%-+", ""):gsub("%-+$", "")
+  -- Collapse multiple consecutive hyphens
+  sanitized = sanitized:gsub("%-%-+", "-")
+  -- Lowercase for consistency
+  sanitized = sanitized:lower()
+  return sanitized
+end
+
+-- Create a markdown note from the task under cursor
+function M.create_note()
+  local hash = M.get_task_hash_under_cursor()
+  if not hash then
+    return
+  end
+
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+
+  -- Get task information
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
+  local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
+  local exit_code = vim.v.shell_error
+
+  if exit_code ~= 0 then
+    vim.notify("Failed to get task information", vim.log.levels.ERROR)
+    return
+  end
+
+  -- Parse JSON
+  local success, tasks = pcall(vim.fn.json_decode, task_json)
+  if not success or not tasks or #tasks == 0 then
+    vim.notify("Failed to parse task data", vim.log.levels.ERROR)
+    return
+  end
+
+  local task = tasks[1]
+  local description = task.description or "untitled"
+  local short_uuid = string.sub(task.uuid, 1, 8)
+
+  -- Check if a NOTE annotation already exists
+  if task.annotations then
+    for _, annotation in ipairs(task.annotations) do
+      if annotation.description and annotation.description:match("^NOTE:%s+") then
+        vim.notify(
+          string.format("Task already has a note annotation: %s", annotation.description),
+          vim.log.levels.WARN
+        )
+        return
+      end
+    end
+  end
+
+  -- Determine the notes directory
+  local notes_dir = config.notes_directory
+  if notes_dir then
+    notes_dir = vim.fn.expand(notes_dir)
+  else
+    notes_dir = vim.fn.getcwd()
+  end
+
+  -- Ensure directory exists
+  if vim.fn.isdirectory(notes_dir) == 0 then
+    vim.fn.mkdir(notes_dir, "p")
+  end
+
+  -- Build the filename from the description
+  local filename = sanitize_filename(description) .. ".md"
+  local full_path = notes_dir .. "/" .. filename
+
+  -- Check if file already exists
+  if vim.fn.filereadable(full_path) == 1 then
+    vim.notify(string.format("File already exists: %s", full_path), vim.log.levels.WARN)
+    return
+  end
+
+  -- Build note content with frontmatter
+  local today = os.date("%Y-%m-%d")
+  local content = string.format(
+    "---\nCreated: %s\nTask: (%s)\n---\n\n# %s\n",
+    today,
+    short_uuid,
+    description
+  )
+
+  -- Write the file
+  local file = io.open(full_path, "w")
+  if not file then
+    vim.notify(string.format("Failed to create file: %s", full_path), vim.log.levels.ERROR)
+    return
+  end
+  file:write(content)
+  file:close()
+
+  -- Add NOTE annotation to the task
+  local annotation_text = string.format("NOTE: \"%s\"", full_path)
+  local escaped_annotation = annotation_text:gsub("'", "'\\''")
+
+  if not execute_task_command(string.format("%s annotate '%s'", hash, escaped_annotation), workspace) then
+    vim.notify("Note file created but failed to add annotation to task", vim.log.levels.WARN)
+  end
+
+  -- Refresh the buffer to show the annotation icon
+  require("frontline").refresh_current_buffer()
+
+  -- Open the note in Neovim
+  vim.cmd("edit " .. vim.fn.fnameescape(full_path))
+  vim.notify(string.format("Created note: %s", full_path), vim.log.levels.INFO)
+end
+
 -- Open URL or file path from task annotations
 function M.open_url()
   local hash = M.get_task_hash_under_cursor()
