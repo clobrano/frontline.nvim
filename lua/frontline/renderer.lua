@@ -75,10 +75,12 @@ local function format_due_date(task, convert_to_local)
   return ""
 end
 
--- Helper to format end date for completed tasks
+-- Helper to format end date for completed tasks (date only, no time)
 local function format_end_date(task, convert_to_local)
   if task["end"] then
-    return parse_iso_date(task["end"], convert_to_local)
+    local date_str = parse_iso_date(task["end"], convert_to_local)
+    -- Strip time portion, keep only the date (YYYY-MM-DD)
+    return string.match(date_str, "^(%d%d%d%d%-%d%d%-%d%d)") or date_str
   end
   return ""
 end

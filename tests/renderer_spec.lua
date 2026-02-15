@@ -22,6 +22,12 @@ local function convert_iso_to_local(iso_date)
   return result
 end
 
+-- Helper to extract date-only from local conversion (for end date tests)
+local function convert_iso_to_local_date_only(iso_date)
+  local full = convert_iso_to_local(iso_date)
+  return string.match(full, "^(%d%d%d%d%-%d%d%-%d%d)") or full
+end
+
 -- Helper to format ISO date without conversion (raw)
 local function format_iso_date_raw(iso_date)
   local year = string.sub(iso_date, 1, 4)
@@ -80,7 +86,7 @@ describe("Renderer Module", function()
           uuid = "enddate123456789",
           ["end"] = "20260115T143000Z",
         }
-        local expected = "* [x] Completed with End Date {" .. convert_iso_to_local("20260115T143000Z") .. "} (enddate1)"
+        local expected = "* [x] Completed with End Date {" .. convert_iso_to_local_date_only("20260115T143000Z") .. "} (enddate1)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -93,7 +99,7 @@ describe("Renderer Module", function()
           scheduled = "20260110T090000Z",
           ["end"] = "20260115T143000Z",
         }
-        local expected = "* [x] Completed with Scheduled {" .. convert_iso_to_local("20260115T143000Z") .. "} (compsche)"
+        local expected = "* [x] Completed with Scheduled {" .. convert_iso_to_local_date_only("20260115T143000Z") .. "} (compsche)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -107,7 +113,7 @@ describe("Renderer Module", function()
           due = "20260120T000000Z",
           ["end"] = "20260115T143000Z",
         }
-        local expected = "* [x] Completed with All Dates {" .. convert_iso_to_local("20260115T143000Z") .. "} [" .. convert_iso_to_local("20260120T000000Z") .. "] (compalld)"
+        local expected = "* [x] Completed with All Dates {" .. convert_iso_to_local_date_only("20260115T143000Z") .. "} [" .. convert_iso_to_local("20260120T000000Z") .. "] (compalld)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
