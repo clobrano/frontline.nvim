@@ -1607,53 +1607,62 @@ function M.create_note()
     end
   end
 
-  -- Ensure directory exists
-  if vim.fn.isdirectory(notes_dir) == 0 then
-    vim.fn.mkdir(notes_dir, "p")
-  end
-
-  -- Build the filename from the description
+  -- Build the proposed filepath from the description
   local filename = sanitize_filename(description) .. ".md"
-  local full_path = notes_dir .. "/" .. filename
+  local proposed_path = notes_dir .. "/" .. filename
 
-  -- Check if file already exists
-  if vim.fn.filereadable(full_path) == 1 then
-    vim.notify(string.format("File already exists: %s", full_path), vim.log.levels.WARN)
-    return
-  end
+  -- Prompt user to confirm or modify the filepath
+  vim.ui.input({ prompt = "Create note: ", default = proposed_path }, function(full_path)
+    if not full_path or full_path == "" then
+      vim.notify("Note creation cancelled", vim.log.levels.INFO)
+      return
+    end
 
-  -- Build note content with title and frontmatter below
-  local today = os.date("%Y-%m-%d")
-  local content = string.format(
-    "# %s\n\n---\nCreated: %s\nTask: (%s)\n---\n",
-    description,
-    today,
-    short_uuid
-  )
+    -- Ensure parent directory exists
+    local parent_dir = vim.fn.fnamemodify(full_path, ":h")
+    if vim.fn.isdirectory(parent_dir) == 0 then
+      vim.fn.mkdir(parent_dir, "p")
+    end
 
-  -- Write the file
-  local file = io.open(full_path, "w")
-  if not file then
-    vim.notify(string.format("Failed to create file: %s", full_path), vim.log.levels.ERROR)
-    return
-  end
-  file:write(content)
-  file:close()
+    -- Check if file already exists
+    if vim.fn.filereadable(full_path) == 1 then
+      vim.notify(string.format("File already exists: %s", full_path), vim.log.levels.WARN)
+      return
+    end
 
-  -- Add NOTE annotation to the task
-  local annotation_text = string.format("NOTE: \"%s\"", full_path)
-  local escaped_annotation = annotation_text:gsub("'", "'\\''")
+    -- Build note content with title and frontmatter below
+    local today = os.date("%Y-%m-%d")
+    local content = string.format(
+      "# %s\n\n---\nCreated: %s\nTask: (%s)\n---\n",
+      description,
+      today,
+      short_uuid
+    )
 
-  if not execute_task_command(string.format("%s annotate '%s'", hash, escaped_annotation), workspace) then
-    vim.notify("Note file created but failed to add annotation to task", vim.log.levels.WARN)
-  end
+    -- Write the file
+    local file = io.open(full_path, "w")
+    if not file then
+      vim.notify(string.format("Failed to create file: %s", full_path), vim.log.levels.ERROR)
+      return
+    end
+    file:write(content)
+    file:close()
 
-  -- Refresh the buffer to show the annotation icon
-  require("frontline").refresh_current_buffer()
+    -- Add NOTE annotation to the task
+    local annotation_text = string.format("NOTE: \"%s\"", full_path)
+    local escaped_annotation = annotation_text:gsub("'", "'\\''")
 
-  -- Open the note in Neovim
-  vim.cmd("edit " .. vim.fn.fnameescape(full_path))
-  vim.notify(string.format("Created note: %s", full_path), vim.log.levels.INFO)
+    if not execute_task_command(string.format("%s annotate '%s'", hash, escaped_annotation), workspace) then
+      vim.notify("Note file created but failed to add annotation to task", vim.log.levels.WARN)
+    end
+
+    -- Refresh the buffer to show the annotation icon
+    require("frontline").refresh_current_buffer()
+
+    -- Open the note in Neovim
+    vim.cmd("edit " .. vim.fn.fnameescape(full_path))
+    vim.notify(string.format("Created note: %s", full_path), vim.log.levels.INFO)
+  end)
 end
 
 -- Open URL or file path from task annotations
