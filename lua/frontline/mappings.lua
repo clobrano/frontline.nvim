@@ -1590,30 +1590,21 @@ function M.create_note()
 
   -- Check per-workspace notes_directory first
   local ws_name = require("frontline").get_current_workspace()
-  vim.notify(string.format("DEBUG create_note: ws_name=%s, has_workspaces=%s",
-    tostring(ws_name), tostring(config.workspaces ~= nil)), vim.log.levels.INFO)
   if ws_name then
     local ws_entry = config.workspaces and config.workspaces[ws_name]
-    vim.notify(string.format("DEBUG create_note: ws_entry type=%s, ws_entry=%s",
-      type(ws_entry), vim.inspect(ws_entry)), vim.log.levels.INFO)
     if type(ws_entry) == "table" and ws_entry.notes_directory then
       notes_dir = vim.fn.expand(ws_entry.notes_directory)
-      vim.notify(string.format("DEBUG create_note: resolved notes_dir=%s", tostring(notes_dir)), vim.log.levels.INFO)
     end
   end
 
   -- Fall back to global notes_directory, then cwd
   if not notes_dir then
-    vim.notify(string.format("DEBUG create_note: FALLBACK notes_dir (was nil), using %s",
-      config.notes_directory and "global notes_directory" or "cwd"), vim.log.levels.WARN)
     if config.notes_directory then
       notes_dir = vim.fn.expand(config.notes_directory)
     else
       notes_dir = vim.fn.getcwd()
     end
   end
-
-  vim.notify(string.format("DEBUG create_note: FINAL notes_dir=%s", tostring(notes_dir)), vim.log.levels.INFO)
 
   -- Build the proposed filepath from the description
   local filename = sanitize_filename(description) .. ".md"

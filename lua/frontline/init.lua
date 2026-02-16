@@ -52,13 +52,6 @@ local function resolve_workspace_rc(entry)
 end
 
 -- Helper: extract notes_directory from a workspace entry (table form only)
-local function resolve_workspace_notes_dir(entry)
-  if type(entry) == "table" and entry.notes_directory then
-    return vim.fn.expand(entry.notes_directory)
-  end
-  return nil
-end
-
 -- Helper function to get workspace rc file path
 local function get_workspace_rc(workspace_name)
   if not workspace_name or workspace_name == "" then
@@ -91,7 +84,6 @@ end
 
 -- Expose workspace helpers for other modules
 M.resolve_workspace_rc = resolve_workspace_rc
-M.resolve_workspace_notes_dir = resolve_workspace_notes_dir
 
 -- Expose config for completion module
 M.config = config
