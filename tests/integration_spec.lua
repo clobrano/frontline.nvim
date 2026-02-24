@@ -304,6 +304,40 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
     assert.truthy(string.find(buffer_lines[3], "No urgency task"), "Task without urgency should come last")
   end)
 
+  it("should sort completed and deleted tasks after active tasks", function()
+    local initial_content = {
+      "# My Tasks | status:any",
+      "",
+    }
+    test_utils.set_mock_buffer_content(initial_content)
+
+    local mock_task_output = vim.fn.json_encode({
+      {id=1, description="Completed task",  status="completed", uuid="comp1111111111111", urgency=20.0},
+      {id=2, description="Pending task",    status="pending",   uuid="pend2222222222222", urgency=5.0},
+      {id=3, description="Deleted task",    status="deleted",   uuid="delt3333333333333", urgency=15.0},
+      {id=4, description="Started task",    status="pending",   uuid="star4444444444444", urgency=8.0},
+    })
+
+    task_client._set_run_shell_command_mock(function(cmd)
+      if string.find(cmd, "status:any") then
+        return mock_task_output, 0
+      elseif string.find(cmd, "depends.any:") then
+        return '[]', 0
+      end
+      return '[]', 0
+    end)
+
+    plugin.refresh_current_buffer()
+
+    local buffer_lines = test_utils.mock_buffer_content
+    -- Active tasks first (sorted by urgency: started=8.0, pending=5.0),
+    -- then done tasks (sorted by urgency: completed=20.0, deleted=15.0)
+    assert.truthy(string.find(buffer_lines[2], "Started task"),   "First line should be highest-urgency active task")
+    assert.truthy(string.find(buffer_lines[3], "Pending task"),   "Second line should be second-highest-urgency active task")
+    assert.truthy(string.find(buffer_lines[4], "Completed task"), "Third line should be highest-urgency done task")
+    assert.truthy(string.find(buffer_lines[5], "Deleted task"),   "Fourth line should be lowest-urgency done task")
+  end)
+
   it("should show both lock and anchor icons when task has both dependency types", function()
     test_utils.set_mock_buffer_content({
       "# My Tasks | status:pending",
