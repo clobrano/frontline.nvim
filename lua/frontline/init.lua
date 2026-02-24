@@ -173,8 +173,13 @@ local function refresh_tasks()
       end
     end
 
-    -- Sort tasks by urgency (highest first)
+    -- Sort tasks: active tasks first (by urgency), then completed/deleted tasks (by urgency)
     table.sort(tasks, function(a, b)
+      local a_done = a.status == "completed" or a.status == "deleted"
+      local b_done = b.status == "completed" or b.status == "deleted"
+      if a_done ~= b_done then
+        return not a_done -- active tasks come first
+      end
       return (a.urgency or 0) > (b.urgency or 0)
     end)
 
