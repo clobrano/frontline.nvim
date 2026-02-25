@@ -416,13 +416,13 @@ describe("Renderer Module", function()
           elseif n == -1 then
             return "yesterday"
           elseif n > 1 and n < 7 then
-            return string.format("%d days", n)
+            return string.format("+%d days", n)
           elseif n >= 7 and n < 30 then
             local w = math.floor(n / 7)
-            return string.format("%d %s", w, w == 1 and "week" or "weeks")
+            return string.format("+%d %s", w, w == 1 and "week" or "weeks")
           elseif n >= 30 then
             local m = math.floor(n / 30)
-            return string.format("%d %s", m, m == 1 and "month" or "months")
+            return string.format("+%d %s", m, m == 1 and "month" or "months")
           elseif n <= -2 and n > -7 then
             return string.format("-%d days", -n)
           elseif n <= -7 and n > -30 then
