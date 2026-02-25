@@ -397,6 +397,192 @@ describe("Renderer Module", function()
         end)
       end)
 
+      describe("Relative date format", function()
+        -- Helper: create an ISO date offset by N days from today (at local noon for stability)
+        local function iso_date_offset(n)
+          local now = os.date("*t")
+          local ts = os.time({ year = now.year, month = now.month, day = now.day, hour = 12, min = 0, sec = 0 })
+          ts = ts + n * 86400
+          local d = os.date("!*t", ts) -- UTC time table
+          return string.format("%04d%02d%02dT%02d%02d%02dZ", d.year, d.month, d.day, d.hour, d.min, d.sec)
+        end
+
+        -- Helper: expected relative string for N days offset
+        local function expected_relative(n)
+          if n == 0 then
+            return "today"
+          elseif n == 1 then
+            return "tomorrow"
+          elseif n == -1 then
+            return "yesterday"
+          elseif n > 1 and n < 7 then
+            return string.format("%d days", n)
+          elseif n >= 7 and n < 30 then
+            local w = math.floor(n / 7)
+            return string.format("%d %s", w, w == 1 and "week" or "weeks")
+          elseif n >= 30 then
+            local m = math.floor(n / 30)
+            return string.format("%d %s", m, m == 1 and "month" or "months")
+          elseif n <= -2 and n > -7 then
+            return string.format("-%d days", -n)
+          elseif n <= -7 and n > -30 then
+            local w = math.floor((-n) / 7)
+            return string.format("-%d %s", w, w == 1 and "week" or "weeks")
+          else
+            local m = math.floor((-n) / 30)
+            return string.format("-%d %s", m, m == 1 and "month" or "months")
+          end
+        end
+
+        it("should show 'today' for a due date that is today", function()
+          local task = {
+            description = "Due Today",
+            status = "pending",
+            due = iso_date_offset(0),
+            uuid = "reltoday00000001",
+          }
+          local expected = "* [ ] Due Today [today] (reltoday)"
+          assert.are.same(expected, renderer.format_task(task, true, true))
+        end)
+
+        it("should show 'tomorrow' for a due date 1 day away", function()
+          local task = {
+            description = "Due Tomorrow",
+            status = "pending",
+            due = iso_date_offset(1),
+            uuid = "reltomrw00000001",
+          }
+          local expected = "* [ ] Due Tomorrow [tomorrow] (reltomrw)"
+          assert.are.same(expected, renderer.format_task(task, true, true))
+        end)
+
+        it("should show 'yesterday' for a due date 1 day ago", function()
+          local task = {
+            description = "Due Yesterday",
+            status = "pending",
+            due = iso_date_offset(-1),
+            uuid = "relyest000000001",
+          }
+          local expected = "* [ ] Due Yesterday [yesterday] (relyest0)"
+          assert.are.same(expected, renderer.format_task(task, true, true))
+        end)
+
+        it("should show 'N days' for a future due date less than 1 week away", function()
+          local task = {
+            description = "Due In Days",
+            status = "pending",
+            due = iso_date_offset(3),
+            uuid = "reldays000000001",
+          }
+          local expected = "* [ ] Due In Days [" .. expected_relative(3) .. "] (reldays0)"
+          assert.are.same(expected, renderer.format_task(task, true, true))
+        end)
+
+        it("should show '-N days' for a past due date less than 1 week ago", function()
+          local task = {
+            description = "Overdue Days",
+            status = "pending",
+            due = iso_date_offset(-3),
+            uuid = "relndays00000001",
+          }
+          local expected = "* [ ] Overdue Days [" .. expected_relative(-3) .. "] (relndays)"
+          assert.are.same(expected, renderer.format_task(task, true, true))
+        end)
+
+        it("should show 'N weeks' for a future due date between 1 and 4 weeks away", function()
+          local task = {
+            description = "Due In Weeks",
+            status = "pending",
+            due = iso_date_offset(14),
+            uuid = "relweeks00000001",
+          }
+          local expected = "* [ ] Due In Weeks [" .. expected_relative(14) .. "] (relweeks)"
+          assert.are.same(expected, renderer.format_task(task, true, true))
+        end)
+
+        it("should show '-N weeks' for a past due date between 1 and 4 weeks ago", function()
+          local task = {
+            description = "Overdue Weeks",
+            status = "pending",
+            due = iso_date_offset(-14),
+            uuid = "relnweeks0000001",
+          }
+          local expected = "* [ ] Overdue Weeks [" .. expected_relative(-14) .. "] (relnweek)"
+          assert.are.same(expected, renderer.format_task(task, true, true))
+        end)
+
+        it("should show 'N months' for a future due date more than 1 month away", function()
+          local task = {
+            description = "Due In Months",
+            status = "pending",
+            due = iso_date_offset(60),
+            uuid = "relmonth00000001",
+          }
+          local expected = "* [ ] Due In Months [" .. expected_relative(60) .. "] (relmonth)"
+          assert.are.same(expected, renderer.format_task(task, true, true))
+        end)
+
+        it("should show '-N months' for a past due date more than 1 month ago", function()
+          local task = {
+            description = "Overdue Months",
+            status = "pending",
+            due = iso_date_offset(-60),
+            uuid = "relnmonth0000001",
+          }
+          local expected = "* [ ] Overdue Months [" .. expected_relative(-60) .. "] (relnmont)"
+          assert.are.same(expected, renderer.format_task(task, true, true))
+        end)
+
+        it("should apply relative format to scheduled date as well", function()
+          local task = {
+            description = "Scheduled Relative",
+            status = "pending",
+            scheduled = iso_date_offset(7),
+            uuid = "relschedfut00001",
+          }
+          local expected = "* [ ] Scheduled Relative (" .. expected_relative(7) .. ") (relsched)"
+          assert.are.same(expected, renderer.format_task(task, true, true))
+        end)
+
+        it("should apply relative format to both scheduled and due dates", function()
+          local task = {
+            description = "Both Relative",
+            status = "pending",
+            scheduled = iso_date_offset(3),
+            due = iso_date_offset(7),
+            uuid = "relboth000000001",
+          }
+          local expected = "* [ ] Both Relative (" .. expected_relative(3) .. ") [" .. expected_relative(7) .. "] (relboth0)"
+          assert.are.same(expected, renderer.format_task(task, true, true))
+        end)
+
+        it("should not use relative format when use_relative is false", function()
+          local task = {
+            description = "Absolute Date",
+            status = "pending",
+            due = "20251225T000000Z",
+            uuid = "absdate000000001",
+          }
+          -- When use_relative is false (default), absolute date is shown
+          local result = renderer.format_task(task, false, false)
+          assert.is_true(result:find("%d%d%d%d%-%d%d%-%d%d") ~= nil)
+          assert.is_nil(result:find("days"))
+          assert.is_nil(result:find("weeks"))
+        end)
+
+        it("should not apply relative format to end date of completed tasks", function()
+          local task = {
+            description = "Completed Task",
+            status = "completed",
+            uuid = "relcomplt0000001",
+            ["end"] = iso_date_offset(-5),
+          }
+          -- End date always shows absolute date regardless of use_relative
+          local result = renderer.format_task(task, true, true)
+          assert.is_true(result:find("{%d%d%d%d%-%d%d%-%d%d}") ~= nil)
+        end)
+      end)
+
       describe("Date conversion modes", function()
         it("should convert UTC to local when convert_to_local is true (default)", function()
           local task = {

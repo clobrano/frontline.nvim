@@ -59,18 +59,87 @@ local function parse_iso_date(iso_date, convert_to_local)
   return date_str
 end
 
+-- Helper to compute a relative date string from an ISO 8601 UTC date
+-- Returns strings like "today", "tomorrow", "yesterday", "2 days", "3 weeks",
+-- "1 month", or "-2 days", "-3 weeks", "-1 month" for past dates
+local function format_relative_date(iso_date)
+  if not iso_date then return nil end
+
+  -- Reformat from YYYYMMDDTHHmmssZ to YYYY-MM-DDTHH:MM:SSZ
+  local formatted = string.gsub(iso_date, "(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)Z", "%1-%2-%3T%4:%5:%6Z")
+
+  -- Get the task's local date (year, month, day)
+  local cmd = string.format("date -d '%s' '+%%Y %%m %%d' 2>/dev/null", formatted)
+  local result = vim.fn.system(cmd)
+  if vim.v.shell_error ~= 0 then return nil end
+
+  result = vim.trim(result)
+  local year, month, day = result:match("^(%d+) (%d+) (%d+)$")
+  if not year then return nil end
+
+  -- Task date at midnight local time
+  local task_ts = os.time({
+    year = tonumber(year), month = tonumber(month), day = tonumber(day),
+    hour = 0, min = 0, sec = 0,
+  })
+
+  -- Today at midnight local time
+  local now = os.date("*t")
+  local today_ts = os.time({
+    year = now.year, month = now.month, day = now.day,
+    hour = 0, min = 0, sec = 0,
+  })
+
+  local diff_days = math.floor((task_ts - today_ts) / 86400)
+
+  if diff_days == 0 then
+    return "today"
+  elseif diff_days == 1 then
+    return "tomorrow"
+  elseif diff_days == -1 then
+    return "yesterday"
+  elseif diff_days > 0 then
+    if diff_days < 7 then
+      return string.format("%d days", diff_days)
+    elseif diff_days < 30 then
+      local weeks = math.floor(diff_days / 7)
+      return string.format("%d %s", weeks, weeks == 1 and "week" or "weeks")
+    else
+      local months = math.floor(diff_days / 30)
+      return string.format("%d %s", months, months == 1 and "month" or "months")
+    end
+  else
+    local abs_days = -diff_days
+    if abs_days < 7 then
+      return string.format("-%d days", abs_days)
+    elseif abs_days < 30 then
+      local weeks = math.floor(abs_days / 7)
+      return string.format("-%d %s", weeks, weeks == 1 and "week" or "weeks")
+    else
+      local months = math.floor(abs_days / 30)
+      return string.format("-%d %s", months, months == 1 and "month" or "months")
+    end
+  end
+end
+
 -- Helper to format scheduled date (rounded parenthesis)
-local function format_scheduled_date(task, convert_to_local)
+local function format_scheduled_date(task, convert_to_local, use_relative)
   if task.scheduled then
-    return string.format("(%s)", parse_iso_date(task.scheduled, convert_to_local))
+    local date_str = use_relative
+      and (format_relative_date(task.scheduled) or parse_iso_date(task.scheduled, convert_to_local))
+      or parse_iso_date(task.scheduled, convert_to_local)
+    return string.format("(%s)", date_str)
   end
   return ""
 end
 
 -- Helper to format due date (squared brackets)
-local function format_due_date(task, convert_to_local)
+local function format_due_date(task, convert_to_local, use_relative)
   if task.due then
-    return string.format("[%s]", parse_iso_date(task.due, convert_to_local))
+    local date_str = use_relative
+      and (format_relative_date(task.due) or parse_iso_date(task.due, convert_to_local))
+      or parse_iso_date(task.due, convert_to_local)
+    return string.format("[%s]", date_str)
   end
   return ""
 end
@@ -136,7 +205,8 @@ end
 
 -- Function to format a single Taskwarrior task
 -- convert_to_local: if true, converts UTC to local time using system date command
-function M.format_task(task, convert_to_local)
+-- use_relative: if true, formats due/scheduled dates as relative (e.g. "tomorrow", "2 days")
+function M.format_task(task, convert_to_local, use_relative)
   -- Default to true (convert to local time by default)
   if convert_to_local == nil then
     convert_to_local = true
@@ -144,7 +214,7 @@ function M.format_task(task, convert_to_local)
 
   local status = get_status_indicator(task)
   local description = task.description or ""
-  local due_date_str = format_due_date(task, convert_to_local)
+  local due_date_str = format_due_date(task, convert_to_local, use_relative)
   local extra_icons_str = get_extra_icons(task)
   local short_hash = string.sub(task.uuid or "", 1, 8)
 
@@ -161,7 +231,7 @@ function M.format_task(task, convert_to_local)
 
   -- Add scheduled date first (rounded parenthesis), but not for completed tasks
   if task.status ~= "completed" then
-    local scheduled_str = format_scheduled_date(task, convert_to_local)
+    local scheduled_str = format_scheduled_date(task, convert_to_local, use_relative)
     if scheduled_str ~= "" then
       table.insert(parts, scheduled_str)
     end
