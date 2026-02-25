@@ -111,13 +111,13 @@ local function format_relative_date(iso_date)
   else
     local abs_days = -diff_days
     if abs_days < 7 then
-      return string.format("-%d days", abs_days)
+      return string.format("%d days ago", abs_days)
     elseif abs_days < 30 then
       local weeks = math.floor(abs_days / 7)
-      return string.format("-%d %s", weeks, weeks == 1 and "week" or "weeks")
+      return string.format("%d %s ago", weeks, weeks == 1 and "week" or "weeks")
     else
       local months = math.floor(abs_days / 30)
-      return string.format("-%d %s", months, months == 1 and "month" or "months")
+      return string.format("%d %s ago", months, months == 1 and "month" or "months")
     end
   end
 end
