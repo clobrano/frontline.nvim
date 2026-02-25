@@ -10,6 +10,7 @@ local completion = require("frontline.completion")
 local config = {
   newlines_after_tasks = 2,
   convert_dates_to_local = true, -- Convert UTC timestamps to local time using system date command (default: true)
+  relative_dates = false, -- Display due/scheduled dates in relative format (e.g. "tomorrow", "2 days", "-1 week")
   workspaces = {
     -- Example configuration (string shorthand):
     -- personal = "~/.config/taskwarrior/personal/.taskrc",
@@ -185,7 +186,7 @@ local function refresh_tasks()
 
     local formatted_tasks = {}
     for _, task in ipairs(tasks) do
-      table.insert(formatted_tasks, renderer.format_task(task, config.convert_dates_to_local))
+      table.insert(formatted_tasks, renderer.format_task(task, config.convert_dates_to_local, config.relative_dates))
     end
 
     -- Add configured number of newlines after tasks
