@@ -1576,10 +1576,17 @@ function M.create_note()
   if task.annotations then
     for _, annotation in ipairs(task.annotations) do
       if annotation.description and annotation.description:match("^NOTE:%s+") then
-        vim.notify(
-          string.format("Task already has a note annotation: %s", annotation.description),
-          vim.log.levels.WARN
-        )
+        -- Extract the file path from the annotation (format: NOTE: "path")
+        local note_path = annotation.description:match('^NOTE:%s+"(.+)"')
+        if note_path and vim.fn.filereadable(note_path) == 1 then
+          vim.cmd("edit " .. vim.fn.fnameescape(note_path))
+          vim.notify(string.format("Opened existing note: %s", note_path), vim.log.levels.INFO)
+        else
+          vim.notify(
+            string.format("Task already has a note annotation: %s", annotation.description),
+            vim.log.levels.WARN
+          )
+        end
         return
       end
     end
