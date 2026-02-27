@@ -4,6 +4,7 @@ local M = {}
 local cache = {
   projects = nil,
   tags = nil,
+  task_ids = nil,
   last_update = 0,
   ttl = 300, -- Cache time-to-live in seconds (5 minutes)
 }
@@ -17,6 +18,7 @@ end
 function M.invalidate_cache()
   cache.projects = nil
   cache.tags = nil
+  cache.task_ids = nil
   cache.last_update = 0
 end
 
@@ -87,6 +89,34 @@ function M.get_tags(workspace_rc)
   cache.last_update = os.time()
 
   return tags
+end
+
+-- Query all pending/waiting task short UUIDs for depends: completion
+function M.get_task_ids(workspace_rc)
+  if is_cache_valid() and cache.task_ids then
+    return cache.task_ids
+  end
+
+  local task_client = require("frontline.task_client")
+  local tasks, err = task_client.execute_query("status:pending or status:waiting", workspace_rc)
+
+  if not tasks then
+    vim.notify("Failed to query tasks: " .. tostring(err), vim.log.levels.WARN)
+    return {}
+  end
+
+  local task_ids = {}
+
+  for _, task in ipairs(tasks) do
+    if task.uuid then
+      table.insert(task_ids, string.sub(task.uuid, 1, 8))
+    end
+  end
+
+  cache.task_ids = task_ids
+  cache.last_update = os.time()
+
+  return task_ids
 end
 
 -- Common date shortcuts for taskwarrior
@@ -190,6 +220,18 @@ local function parse_completion_context(line, col)
     return "date", scheduled_match
   end
 
+  -- Check for wait date
+  local wait_match = string.match(text_before, "wait:([%w%-]*)$")
+  if wait_match ~= nil then
+    return "date", wait_match
+  end
+
+  -- Check for depends (task UUID prefix)
+  local depends_match = string.match(text_before, "depends:([%w%-]*)$")
+  if depends_match ~= nil then
+    return "task_id", depends_match
+  end
+
   -- Check for priority
   local priority_match = string.match(text_before, "priority:([HML]*)$")
   if priority_match ~= nil then
@@ -284,6 +326,20 @@ function M.complete_task_input(arglead, cmdline, cursorpos)
     suggestions = M.get_tags(workspace_rc)
   elseif comp_type == "date" then
     suggestions = M.get_date_suggestions()
+  elseif comp_type == "task_id" then
+    -- First check if there's a workspace in the command line being typed
+    local _, workspace_rc = parse_workspace_from_cmdline(cmdline)
+
+    -- If no workspace in cmdline, fall back to current buffer workspace
+    if not workspace_rc then
+      local frontline = require("frontline")
+      local current_workspace = frontline.get_current_workspace()
+      if current_workspace and frontline.config.workspaces and frontline.config.workspaces[current_workspace] then
+        workspace_rc = frontline.resolve_workspace_rc(frontline.config.workspaces[current_workspace])
+      end
+    end
+
+    suggestions = M.get_task_ids(workspace_rc)
   elseif comp_type == "priority" then
     suggestions = M.get_priority_suggestions()
   end
@@ -325,6 +381,19 @@ function M.setup()
       return M.complete_task_input(arglead, input_line, input_cursor)
     end,
     desc = "Create a new task as dependency with autocomplete support",
+  })
+
+  vim.api.nvim_create_user_command("FrontlineModifyTask", function(opts)
+    local mappings = require("frontline.mappings")
+    mappings.modify_task_with_input(opts.args)
+  end, {
+    nargs = "*",
+    complete = function(arglead, cmdline, cursorpos)
+      local input_line = cmdline:match("^%s*%S+%s*(.*)$") or ""
+      local input_cursor = cursorpos - (#cmdline - #input_line)
+      return M.complete_task_input(arglead, input_line, input_cursor)
+    end,
+    desc = "Modify a task with autocomplete support",
   })
 end
 

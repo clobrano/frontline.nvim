@@ -6,6 +6,9 @@ local config = { enable_reverse_dependencies = true }
 -- Store parent task info for dependency creation
 local dependency_parent_task = nil
 
+-- Store task hash for modify operation
+local modify_task_hash = nil
+
 -- Function to set config from init.lua
 function M.set_config(new_config)
   config = new_config
@@ -732,6 +735,29 @@ function M.toggle_started()
   end
 end
 
+-- Modify a task with the given input string (called by FrontlineModifyTask command)
+function M.modify_task_with_input(input)
+  if not modify_task_hash then
+    vim.notify("No task set for modification", vim.log.levels.ERROR)
+    return
+  end
+
+  local hash = modify_task_hash
+  local workspace = require("frontline").get_current_workspace()
+  modify_task_hash = nil
+
+  if not input or input == "" then
+    vim.notify("Modification cancelled", vim.log.levels.INFO)
+    return
+  end
+
+  vim.notify("Modifying task...", vim.log.levels.INFO)
+
+  if execute_task_command(string.format("%s modify %s", hash, input), workspace) then
+    require("frontline").refresh_current_buffer()
+  end
+end
+
 -- Modify task description
 function M.modify_task()
   local hash = M.get_task_hash_under_cursor()
@@ -739,23 +765,9 @@ function M.modify_task()
     return
   end
 
-  -- Get current workspace for proper task operations
-  local workspace = require("frontline").get_current_workspace()
-
-  -- Prompt user for modification string
-  vim.ui.input({ prompt = "Modify task (e.g., 'priority:H due:tomorrow'): " }, function(input)
-    if not input or input == "" then
-      vim.notify("Modification cancelled", vim.log.levels.INFO)
-      return
-    end
-
-    vim.notify("Modifying task...", vim.log.levels.INFO)
-
-    if execute_task_command(string.format("%s modify %s", hash, input), workspace) then
-      -- Refresh the buffer
-      require("frontline").refresh_current_buffer()
-    end
-  end)
+  -- Store hash for the command to access, then open command line with completion
+  modify_task_hash = hash
+  vim.fn.feedkeys(":FrontlineModifyTask ", "n")
 end
 
 -- Add annotation to task
