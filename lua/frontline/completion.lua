@@ -202,10 +202,15 @@ local function parse_completion_context(line, col)
     return "project", project_match
   end
 
-  -- Check for tag (+)
+  -- Check for tag add (+) or tag remove (-)
   local tag_match = string.match(text_before, "%+([%w_%-]*)$")
   if tag_match ~= nil then
     return "tag", tag_match
+  end
+
+  local tag_remove_match = string.match(text_before, "%-([%w_%-]*)$")
+  if tag_remove_match ~= nil then
+    return "tag", tag_remove_match
   end
 
   -- Check for due date
