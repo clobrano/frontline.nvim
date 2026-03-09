@@ -527,6 +527,62 @@ function M.show_blocking_dependencies()
   vim.api.nvim_echo(echo_chunks, true, {})
 end
 
+-- Show tasks blocked by the current task (reverse dependencies), regardless of enable_reverse_dependencies
+function M.show_blocked_tasks()
+  local hash = M.get_task_hash_under_cursor()
+  if not hash then
+    return
+  end
+
+  local workspace = require("frontline").get_current_workspace()
+
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
+  local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Failed to get task information", vim.log.levels.ERROR)
+    return
+  end
+
+  local success, tasks = pcall(vim.fn.json_decode, task_json)
+  if not success or not tasks or #tasks == 0 then
+    vim.notify("Failed to parse task data", vim.log.levels.ERROR)
+    return
+  end
+
+  local task = tasks[1]
+  local task_client = require("frontline.task_client")
+  local reverse_deps_tasks, rev_err = task_client.get_reverse_dependencies(task.uuid)
+
+  if rev_err then
+    vim.notify("Failed to get blocked tasks: " .. rev_err, vim.log.levels.ERROR)
+    return
+  end
+
+  if not reverse_deps_tasks or #reverse_deps_tasks == 0 then
+    vim.notify("No tasks are blocked by this task", vim.log.levels.INFO)
+    return
+  end
+
+  local echo_chunks = {
+    { string.format("Tasks blocked by this task (%d total):\n", #reverse_deps_tasks), "Title" }
+  }
+
+  for _, rev_task in ipairs(reverse_deps_tasks) do
+    local is_pending = rev_task.status ~= "completed"
+    local status_indicator = is_pending and "[ ]" or "[x]"
+    local status_color = is_pending and "WarningMsg" or "Comment"
+    table.insert(echo_chunks, {
+      string.format("  %s %s (%s)\n", status_indicator, rev_task.description or "Unknown task",
+        string.sub(rev_task.uuid, 1, 8)),
+      status_color
+    })
+  end
+
+  vim.api.nvim_echo(echo_chunks, true, {})
+end
+
 -- Add a new task as a dependency for the task under cursor
 -- Create a dependency task with the given input string (called by command)
 function M.create_dependency_with_input(input)
