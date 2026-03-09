@@ -30,6 +30,7 @@ local config = {
     add_annotation = "<leader>tA",
     edit_task = "<leader>te",
     show_blocking_dependencies = "<leader>tb",
+    show_blocked_tasks = "<leader>tR",
     add_dependency = "<leader>tB",
     undo_task = "<leader>tu",
     create_task = "<leader>tn",
@@ -299,7 +300,13 @@ function M.setup(opts)
       -- Show blocking dependencies
       if config.mappings.show_blocking_dependencies then
         vim.keymap.set("n", config.mappings.show_blocking_dependencies, mappings.show_blocking_dependencies,
-          vim.tbl_extend("force", opts_mapping, { desc = "Show task blocking dependencies" }))
+          vim.tbl_extend("force", opts_mapping, { desc = "Show tasks blocking this task" }))
+      end
+
+      -- Show blocked tasks (tasks this task is blocking)
+      if config.mappings.show_blocked_tasks then
+        vim.keymap.set("n", config.mappings.show_blocked_tasks, mappings.show_blocked_tasks,
+          vim.tbl_extend("force", opts_mapping, { desc = "Show tasks this task is blocking" }))
       end
 
       -- Add task as dependency

@@ -419,69 +419,80 @@ function M.show_blocking_dependencies()
     end
   end
 
-  -- Get reverse dependencies (tasks this task is blocking)
-  local reverse_deps = {}
-  local reverse_deps_tasks, rev_err = task_client.get_reverse_dependencies(task.uuid)
-
-  if not rev_err and reverse_deps_tasks then
-    for _, rev_task in ipairs(reverse_deps_tasks) do
-      table.insert(reverse_deps, {
-        uuid = rev_task.uuid,
-        description = rev_task.description or "Unknown task",
-        short_hash = string.sub(rev_task.uuid, 1, 8),
-        status = rev_task.status,
-        is_blocking = rev_task.status ~= "completed"
-      })
-    end
-  end
-
-  -- Check if there are any dependencies to show
-  if #forward_deps == 0 and #reverse_deps == 0 then
-    vim.notify("Task has no dependencies (forward or reverse)", vim.log.levels.INFO)
+  if #forward_deps == 0 then
+    vim.notify("Task has no blocking dependencies", vim.log.levels.INFO)
     return
   end
 
   -- Build display
   local echo_chunks = {}
 
-  -- Forward dependencies section
-  if #forward_deps > 0 then
+  table.insert(echo_chunks, {
+    string.format("Tasks blocking this task (%d total, %d incomplete):\n",
+      #forward_deps, forward_blocking_count),
+    "Title"
+  })
+
+  for _, dep in ipairs(forward_deps) do
+    local status_indicator = dep.is_blocking and "[ ]" or "[x]"
+    local status_color = dep.is_blocking and "WarningMsg" or "Comment"
     table.insert(echo_chunks, {
-      string.format("Tasks blocking this task (%d total, %d incomplete):\n",
-        #forward_deps, forward_blocking_count),
-      "Title"
+      string.format("  %s %s (%s)\n", status_indicator, dep.description, dep.short_hash),
+      status_color
     })
-
-    for _, dep in ipairs(forward_deps) do
-      local status_indicator = dep.is_blocking and "[ ]" or "[x]"
-      local status_color = dep.is_blocking and "WarningMsg" or "Comment"
-      table.insert(echo_chunks, {
-        string.format("  %s %s (%s)\n", status_indicator, dep.description, dep.short_hash),
-        status_color
-      })
-    end
-
-    -- Add blank line if we also have reverse deps
-    if #reverse_deps > 0 then
-      table.insert(echo_chunks, {"\n", "Normal"})
-    end
   end
 
-  -- Reverse dependencies section
-  if #reverse_deps > 0 then
-    table.insert(echo_chunks, {
-      string.format("Tasks this task is blocking (%d total):\n", #reverse_deps),
-      "Title"
-    })
+  vim.api.nvim_echo(echo_chunks, true, {})
+end
 
-    for _, dep in ipairs(reverse_deps) do
-      local status_indicator = dep.is_blocking and "[ ]" or "[x]"
-      local status_color = dep.is_blocking and "WarningMsg" or "Comment"
-      table.insert(echo_chunks, {
-        string.format("  %s %s (%s)\n", status_indicator, dep.description, dep.short_hash),
-        status_color
-      })
-    end
+-- Show tasks that the task under cursor is blocking (reverse dependencies)
+function M.show_blocked_tasks()
+  local hash = M.get_task_hash_under_cursor()
+  if not hash then
+    return
+  end
+
+  -- Get current workspace for proper task operations
+  local workspace = require("frontline").get_current_workspace()
+  local workspace_rc = get_workspace_rc_with_override(workspace)
+  local task_client = require("frontline.task_client")
+
+  -- Get task information
+  local tasks, err = task_client.execute_query(hash, workspace_rc)
+  if err or not tasks or #tasks == 0 then
+    vim.notify("Failed to get task information", vim.log.levels.ERROR)
+    return
+  end
+
+  local task = tasks[1]
+
+  -- Get reverse dependencies (tasks this task is blocking)
+  local reverse_deps_tasks, rev_err = task_client.get_reverse_dependencies(task.uuid)
+  if rev_err then
+    vim.notify("Failed to query blocked tasks", vim.log.levels.ERROR)
+    return
+  end
+
+  if not reverse_deps_tasks or #reverse_deps_tasks == 0 then
+    vim.notify("Task is not blocking any other task", vim.log.levels.INFO)
+    return
+  end
+
+  local echo_chunks = {}
+  table.insert(echo_chunks, {
+    string.format("Tasks this task is blocking (%d total):\n", #reverse_deps_tasks),
+    "Title"
+  })
+
+  for _, rev_task in ipairs(reverse_deps_tasks) do
+    local is_pending = rev_task.status ~= "completed"
+    local status_indicator = is_pending and "[ ]" or "[x]"
+    local status_color = is_pending and "WarningMsg" or "Comment"
+    table.insert(echo_chunks, {
+      string.format("  %s %s (%s)\n", status_indicator, rev_task.description or "Unknown task",
+        string.sub(rev_task.uuid, 1, 8)),
+      status_color
+    })
   end
 
   vim.api.nvim_echo(echo_chunks, true, {})

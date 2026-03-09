@@ -375,6 +375,8 @@ describe("show_blocking_dependencies", function()
     test_utils.setup_mocks()
     original_run_shell_command = task_client._run_shell_command
     plugin = require("frontline")
+    plugin.setup({})
+    mappings = require("frontline.mappings")
   end)
 
   after_each(function()
@@ -385,93 +387,7 @@ describe("show_blocking_dependencies", function()
     package.loaded["frontline.test_utils"] = nil
   end)
 
-  it("should show tasks this task is blocking even when enable_reverse_dependencies is false", function()
-    plugin.setup({ enable_reverse_dependencies = false })
-    mappings = require("frontline.mappings")
-
-    -- Mock current line to have a task hash
-    local original_get_current_line = vim.api.nvim_get_current_line
-    vim.api.nvim_get_current_line = function()
-      return "* [ ] Some task (task1234)"
-    end
-
-    -- Capture echo output
-    local echo_chunks_received = nil
-    local original_echo = vim.api.nvim_echo
-    vim.api.nvim_echo = function(chunks, ...)
-      echo_chunks_received = chunks
-    end
-
-    local reverse_dep_queried = false
-    task_client._set_run_shell_command_mock(function(cmd)
-      if string.find(cmd, "'task1234' export") then
-        return '[{"uuid":"task1234-full-uuid","description":"Some task","status":"pending"}]', 0
-      elseif string.find(cmd, "depends.any:task1234%-full%-uuid") then
-        reverse_dep_queried = true
-        return '[{"uuid":"blocked-uuid","description":"Blocked task","status":"pending","depends":["task1234-full-uuid"]}]', 0
-      end
-      return '[]', 0
-    end)
-
-    mappings.show_blocking_dependencies()
-
-    assert.is_true(reverse_dep_queried, "Reverse deps should be queried even when enable_reverse_dependencies = false")
-    assert.is_not_nil(echo_chunks_received, "Echo should be called to display results")
-
-    -- Verify "Tasks this task is blocking" section appears
-    local output_text = ""
-    for _, chunk in ipairs(echo_chunks_received) do
-      output_text = output_text .. chunk[1]
-    end
-    assert.truthy(string.find(output_text, "Tasks this task is blocking"), "Should show 'Tasks this task is blocking' section")
-    assert.truthy(string.find(output_text, "Blocked task"), "Should show the blocked task description")
-
-    vim.api.nvim_get_current_line = original_get_current_line
-    vim.api.nvim_echo = original_echo
-  end)
-
-  it("should show tasks this task is blocking when enable_reverse_dependencies is true", function()
-    plugin.setup({ enable_reverse_dependencies = true })
-    mappings = require("frontline.mappings")
-
-    local original_get_current_line = vim.api.nvim_get_current_line
-    vim.api.nvim_get_current_line = function()
-      return "* [ ] Blocking task (abcd1234)"
-    end
-
-    local echo_chunks_received = nil
-    local original_echo = vim.api.nvim_echo
-    vim.api.nvim_echo = function(chunks, ...)
-      echo_chunks_received = chunks
-    end
-
-    task_client._set_run_shell_command_mock(function(cmd)
-      if string.find(cmd, "'abcd1234' export") then
-        return '[{"uuid":"abcd1234-full-uuid","description":"Blocking task","status":"pending"}]', 0
-      elseif string.find(cmd, "depends.any:abcd1234%-full%-uuid") then
-        return '[{"uuid":"blocked-uuid-2","description":"Waiting task","status":"pending","depends":["abcd1234-full-uuid"]}]', 0
-      end
-      return '[]', 0
-    end)
-
-    mappings.show_blocking_dependencies()
-
-    assert.is_not_nil(echo_chunks_received, "Echo should be called")
-    local output_text = ""
-    for _, chunk in ipairs(echo_chunks_received) do
-      output_text = output_text .. chunk[1]
-    end
-    assert.truthy(string.find(output_text, "Tasks this task is blocking"), "Should show 'Tasks this task is blocking' section")
-    assert.truthy(string.find(output_text, "Waiting task"), "Should show the blocked task description")
-
-    vim.api.nvim_get_current_line = original_get_current_line
-    vim.api.nvim_echo = original_echo
-  end)
-
-  it("should show tasks blocking this task (forward deps) in the output", function()
-    plugin.setup({ enable_reverse_dependencies = false })
-    mappings = require("frontline.mappings")
-
+  it("should show tasks blocking this task (forward deps)", function()
     local original_get_current_line = vim.api.nvim_get_current_line
     vim.api.nvim_get_current_line = function()
       return "* [ ] Dependent task (dep01234)"
@@ -488,8 +404,6 @@ describe("show_blocking_dependencies", function()
         return '[{"uuid":"dep01234-full-uuid","description":"Dependent task","status":"pending","depends":["blocker-uuid"]}]', 0
       elseif string.find(cmd, "'blocker%-uuid' export") then
         return '[{"uuid":"blocker-uuid","description":"Blocking task","status":"pending"}]', 0
-      elseif string.find(cmd, "depends.any:dep01234%-full%-uuid") then
-        return '[]', 0
       end
       return '[]', 0
     end)
@@ -508,10 +422,7 @@ describe("show_blocking_dependencies", function()
     vim.api.nvim_echo = original_echo
   end)
 
-  it("should notify when task has no dependencies at all", function()
-    plugin.setup({ enable_reverse_dependencies = false })
-    mappings = require("frontline.mappings")
-
+  it("should notify when task has no blocking dependencies", function()
     local original_get_current_line = vim.api.nvim_get_current_line
     vim.api.nvim_get_current_line = function()
       return "* [ ] Standalone task (solo1234)"
@@ -524,8 +435,6 @@ describe("show_blocking_dependencies", function()
     task_client._set_run_shell_command_mock(function(cmd)
       if string.find(cmd, "'solo1234' export") then
         return '[{"uuid":"solo1234-full-uuid","description":"Standalone task","status":"pending"}]', 0
-      elseif string.find(cmd, "depends.any:solo1234%-full%-uuid") then
-        return '[]', 0
       end
       return '[]', 0
     end)
@@ -533,9 +442,138 @@ describe("show_blocking_dependencies", function()
     mappings.show_blocking_dependencies()
 
     assert.truthy(notify_msg, "Should send a notification")
-    assert.truthy(string.find(notify_msg, "no dependencies"), "Should say 'no dependencies'")
+    assert.truthy(string.find(notify_msg, "no blocking dependencies"), "Should say 'no blocking dependencies'")
 
     vim.api.nvim_get_current_line = original_get_current_line
     vim.notify = original_notify
+  end)
+end)
+
+describe("show_blocked_tasks", function()
+  local test_utils
+  local mappings
+  local original_run_shell_command
+
+  before_each(function()
+    test_utils = require("frontline.test_utils")
+    test_utils.setup_mocks()
+    original_run_shell_command = task_client._run_shell_command
+    plugin = require("frontline")
+    plugin.setup({})
+    mappings = require("frontline.mappings")
+  end)
+
+  after_each(function()
+    task_client._set_run_shell_command_mock(original_run_shell_command)
+    test_utils.restore_mocks()
+    package.loaded["frontline"] = nil
+    package.loaded["frontline.mappings"] = nil
+    package.loaded["frontline.test_utils"] = nil
+  end)
+
+  it("should show tasks this task is blocking (reverse deps)", function()
+    local original_get_current_line = vim.api.nvim_get_current_line
+    vim.api.nvim_get_current_line = function()
+      return "* [ ] Blocking task (abcd1234)"
+    end
+
+    local echo_chunks_received = nil
+    local original_echo = vim.api.nvim_echo
+    vim.api.nvim_echo = function(chunks, ...)
+      echo_chunks_received = chunks
+    end
+
+    task_client._set_run_shell_command_mock(function(cmd)
+      if string.find(cmd, "'abcd1234' export") then
+        return '[{"uuid":"abcd1234-full-uuid","description":"Blocking task","status":"pending"}]', 0
+      elseif string.find(cmd, "depends.any:abcd1234%-full%-uuid") then
+        return '[{"uuid":"blocked-uuid","description":"Waiting task","status":"pending","depends":["abcd1234-full-uuid"]}]', 0
+      end
+      return '[]', 0
+    end)
+
+    mappings.show_blocked_tasks()
+
+    assert.is_not_nil(echo_chunks_received, "Echo should be called")
+    local output_text = ""
+    for _, chunk in ipairs(echo_chunks_received) do
+      output_text = output_text .. chunk[1]
+    end
+    assert.truthy(string.find(output_text, "Tasks this task is blocking"), "Should show 'Tasks this task is blocking' section")
+    assert.truthy(string.find(output_text, "Waiting task"), "Should show the blocked task description")
+
+    vim.api.nvim_get_current_line = original_get_current_line
+    vim.api.nvim_echo = original_echo
+  end)
+
+  it("should notify when task is not blocking any other task", function()
+    local original_get_current_line = vim.api.nvim_get_current_line
+    vim.api.nvim_get_current_line = function()
+      return "* [ ] Leaf task (leaf1234)"
+    end
+
+    local notify_msg = nil
+    local original_notify = vim.notify
+    vim.notify = function(msg, ...) notify_msg = msg end
+
+    task_client._set_run_shell_command_mock(function(cmd)
+      if string.find(cmd, "'leaf1234' export") then
+        return '[{"uuid":"leaf1234-full-uuid","description":"Leaf task","status":"pending"}]', 0
+      elseif string.find(cmd, "depends.any:leaf1234%-full%-uuid") then
+        return '[]', 0
+      end
+      return '[]', 0
+    end)
+
+    mappings.show_blocked_tasks()
+
+    assert.truthy(notify_msg, "Should send a notification")
+    assert.truthy(string.find(notify_msg, "not blocking"), "Should say task is not blocking anything")
+
+    vim.api.nvim_get_current_line = original_get_current_line
+    vim.notify = original_notify
+  end)
+
+  it("should work regardless of enable_reverse_dependencies config", function()
+    -- Reconfigure with reverse deps disabled
+    plugin.setup({ enable_reverse_dependencies = false })
+    mappings = require("frontline.mappings")
+
+    local original_get_current_line = vim.api.nvim_get_current_line
+    vim.api.nvim_get_current_line = function()
+      return "* [ ] Some task (task1234)"
+    end
+
+    local echo_chunks_received = nil
+    local original_echo = vim.api.nvim_echo
+    vim.api.nvim_echo = function(chunks, ...)
+      echo_chunks_received = chunks
+    end
+
+    local reverse_dep_queried = false
+    task_client._set_run_shell_command_mock(function(cmd)
+      if string.find(cmd, "'task1234' export") then
+        return '[{"uuid":"task1234-full-uuid","description":"Some task","status":"pending"}]', 0
+      elseif string.find(cmd, "depends.any:task1234%-full%-uuid") then
+        reverse_dep_queried = true
+        return '[{"uuid":"blocked-uuid","description":"Blocked task","status":"pending","depends":["task1234-full-uuid"]}]', 0
+      end
+      return '[]', 0
+    end)
+
+    mappings.show_blocked_tasks()
+
+    assert.is_true(reverse_dep_queried, "Reverse deps should always be queried")
+    assert.is_not_nil(echo_chunks_received, "Echo should be called to display results")
+
+    local output_text = ""
+    for _, chunk in ipairs(echo_chunks_received) do
+      output_text = output_text .. chunk[1]
+    end
+    assert.truthy(string.find(output_text, "Tasks this task is blocking"), "Should show 'Tasks this task is blocking' section")
+    assert.truthy(string.find(output_text, "Blocked task"), "Should show the blocked task description")
+
+    vim.api.nvim_get_current_line = original_get_current_line
+    vim.api.nvim_echo = original_echo
   end)
 end)
