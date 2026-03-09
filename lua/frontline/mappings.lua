@@ -384,22 +384,13 @@ function M.show_blocking_dependencies()
 
   -- Get current workspace for proper task operations
   local workspace = require("frontline").get_current_workspace()
+  local workspace_rc = get_workspace_rc_with_override(workspace)
+  local task_client = require("frontline.task_client")
 
   -- Get task information
-  local cmd = build_task_command(string.format("%s export", hash), workspace)
-  local task_json = vim.fn.system(cmd)
-  task_json = filter_taskwarrior_messages(task_json, workspace)
-  local exit_code = vim.v.shell_error
-
-  if exit_code ~= 0 then
+  local tasks, err = task_client.execute_query(hash, workspace_rc)
+  if err or not tasks or #tasks == 0 then
     vim.notify("Failed to get task information", vim.log.levels.ERROR)
-    return
-  end
-
-  -- Parse JSON
-  local success, tasks = pcall(vim.fn.json_decode, task_json)
-  if not success or not tasks or #tasks == 0 then
-    vim.notify("Failed to parse task data", vim.log.levels.ERROR)
     return
   end
 
@@ -411,73 +402,42 @@ function M.show_blocking_dependencies()
 
   if task.depends and #task.depends > 0 then
     for _, dep_uuid in ipairs(task.depends) do
-      local dep_cmd = build_task_command(string.format("%s export", dep_uuid))
-      local dep_json = vim.fn.system(dep_cmd)
-      dep_json = filter_taskwarrior_messages(dep_json, nil)
-      if vim.v.shell_error == 0 then
-        local dep_success, dep_tasks = pcall(vim.fn.json_decode, dep_json)
-        if dep_success and dep_tasks and #dep_tasks > 0 then
-          local dep_task = dep_tasks[1]
-          table.insert(forward_deps, {
-            uuid = dep_uuid,
-            description = dep_task.description or "Unknown task",
-            short_hash = string.sub(dep_uuid, 1, 8),
-            status = dep_task.status,
-            is_blocking = dep_task.status ~= "completed"
-          })
-          if dep_task.status ~= "completed" then
-            forward_blocking_count = forward_blocking_count + 1
-          end
-        end
-      end
-    end
-  end
-
-  -- Get all dependencies (both complete and incomplete)
-  local deps_info = {}
-  for _, dep_uuid in ipairs(task.depends) do
-    local dep_cmd = build_task_command(string.format("%s export", dep_uuid), workspace)
-    local dep_json = vim.fn.system(dep_cmd)
-    dep_json = filter_taskwarrior_messages(dep_json, workspace)
-    if vim.v.shell_error == 0 then
-      local dep_success, dep_tasks = pcall(vim.fn.json_decode, dep_json)
-      if dep_success and dep_tasks and #dep_tasks > 0 then
+      local dep_tasks, dep_err = task_client.execute_query(dep_uuid, workspace_rc)
+      if not dep_err and dep_tasks and #dep_tasks > 0 then
         local dep_task = dep_tasks[1]
-        table.insert(deps_info, {
+        table.insert(forward_deps, {
           uuid = dep_uuid,
           description = dep_task.description or "Unknown task",
           short_hash = string.sub(dep_uuid, 1, 8),
           status = dep_task.status,
           is_blocking = dep_task.status ~= "completed"
-      })
+        })
+        if dep_task.status ~= "completed" then
+          forward_blocking_count = forward_blocking_count + 1
+        end
       end
     end
   end
-  -- Get reverse dependencies (tasks this task is blocking) - only if enabled
-  local reverse_deps = {}
-  if config.enable_reverse_dependencies then
-    local task_client = require("frontline.task_client")
-    local reverse_deps_tasks, rev_err = task_client.get_reverse_dependencies(task.uuid)
 
-    if not rev_err and reverse_deps_tasks then
-      for _, rev_task in ipairs(reverse_deps_tasks) do
-        table.insert(reverse_deps, {
-          uuid = rev_task.uuid,
-          description = rev_task.description or "Unknown task",
-          short_hash = string.sub(rev_task.uuid, 1, 8),
-          status = rev_task.status,
-          is_blocking = rev_task.status ~= "completed"
-        })
-      end
+  -- Get reverse dependencies (tasks this task is blocking)
+  local reverse_deps = {}
+  local reverse_deps_tasks, rev_err = task_client.get_reverse_dependencies(task.uuid)
+
+  if not rev_err and reverse_deps_tasks then
+    for _, rev_task in ipairs(reverse_deps_tasks) do
+      table.insert(reverse_deps, {
+        uuid = rev_task.uuid,
+        description = rev_task.description or "Unknown task",
+        short_hash = string.sub(rev_task.uuid, 1, 8),
+        status = rev_task.status,
+        is_blocking = rev_task.status ~= "completed"
+      })
     end
   end
 
   -- Check if there are any dependencies to show
   if #forward_deps == 0 and #reverse_deps == 0 then
-    local msg = config.enable_reverse_dependencies
-      and "Task has no dependencies (forward or reverse)"
-      or "Task has no dependencies"
-    vim.notify(msg, vim.log.levels.INFO)
+    vim.notify("Task has no dependencies (forward or reverse)", vim.log.levels.INFO)
     return
   end
 
