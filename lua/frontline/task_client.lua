@@ -59,6 +59,42 @@ function M.execute_query(query_string, workspace_rc)
   return parsed_json
 end
 
+-- Get the set of UUIDs for all tasks currently blocking other tasks (single query)
+function M.get_blocking_uuids(workspace_rc)
+  local cmd
+  if workspace_rc and workspace_rc ~= "" then
+    local escaped_rc = string.gsub(workspace_rc, "'", "'\\''")
+    cmd = string.format("task rc:'%s' +BLOCKING export", escaped_rc)
+  else
+    cmd = "task +BLOCKING export"
+  end
+
+  local stdout, exit_code = _run_shell_command(cmd)
+  if exit_code ~= 0 then
+    return nil, string.format("Failed to query blocking tasks (exit code %d)", exit_code)
+  end
+
+  -- Strip TASKRC override messages (same as execute_query)
+  local cleaned_stdout = stdout
+  if workspace_rc then
+    cleaned_stdout = string.gsub(stdout, "^TASKRC override:.-\n", "")
+  end
+
+  local ok, parsed_json = pcall(vim.fn.json_decode, cleaned_stdout)
+  if not ok then
+    return nil, string.format("Failed to parse blocking tasks JSON: %s", parsed_json)
+  end
+
+  local uuid_set = {}
+  for _, task in ipairs(parsed_json) do
+    if task.uuid then
+      uuid_set[task.uuid] = true
+    end
+  end
+
+  return uuid_set
+end
+
 -- Function to get reverse dependencies (tasks that depend on this task)
 function M.get_reverse_dependencies(task_uuid)
   -- Query all tasks with dependencies

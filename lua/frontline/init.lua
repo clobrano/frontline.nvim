@@ -19,7 +19,6 @@ local config = {
   },
   default_workspace = nil, -- Name of the default workspace (uses system taskwarrior if nil)
   enable_reverse_dependencies = true, -- Enable reverse dependency tracking (anchor icon and "tasks this task is blocking" view)
-  reverse_dependencies_warn_threshold = 1000, -- Warn if reverse dependency queries take longer than this (in milliseconds)
   require_todo_annotations_done = true, -- Prevents task completion if there are annotations starting with "TODO:" or "[ ]" (must be changed to "DONE:" or "[x]")
   notes_directory = nil, -- Fallback directory for markdown notes (nil = cwd). Overridden by per-workspace notes_directory.
   mappings = {
@@ -30,6 +29,7 @@ local config = {
     add_annotation = "<leader>tA",
     edit_task = "<leader>te",
     show_blocking_dependencies = "<leader>tb",
+    show_blocked_tasks = "<leader>tr",
     add_dependency = "<leader>tB",
     undo_task = "<leader>tu",
     create_task = "<leader>tn",
@@ -144,31 +144,16 @@ local function refresh_tasks()
       return
     end
 
-    -- Fetch reverse dependencies for each task (if enabled)
+    -- Fetch blocking tasks in a single query (if enabled)
     if config.enable_reverse_dependencies then
-      local start_time = vim.loop.hrtime()
-
-      for _, task in ipairs(tasks) do
-        local reverse_deps, rev_err = task_client.get_reverse_dependencies(task.uuid)
-        if not rev_err and reverse_deps then
-          task._reverse_deps = reverse_deps
-        else
-          task._reverse_deps = {}
-        end
+      local blocking_uuids, blocking_err = task_client.get_blocking_uuids(workspace_rc)
+      if blocking_err then
+        vim.notify("Frontline: " .. blocking_err, vim.log.levels.WARN)
       end
-
-      local elapsed_ms = (vim.loop.hrtime() - start_time) / 1000000
-      if elapsed_ms > config.reverse_dependencies_warn_threshold then
-        vim.notify(
-          string.format(
-            "Reverse dependency queries took %.0fms. Consider disabling with enable_reverse_dependencies=false in setup().",
-            elapsed_ms
-          ),
-          vim.log.levels.WARN
-        )
+      for _, task in ipairs(tasks) do
+        task._reverse_deps = (blocking_uuids and blocking_uuids[task.uuid]) and { true } or {}
       end
     else
-      -- Set empty reverse deps if feature is disabled
       for _, task in ipairs(tasks) do
         task._reverse_deps = {}
       end
@@ -300,6 +285,12 @@ function M.setup(opts)
       if config.mappings.show_blocking_dependencies then
         vim.keymap.set("n", config.mappings.show_blocking_dependencies, mappings.show_blocking_dependencies,
           vim.tbl_extend("force", opts_mapping, { desc = "Show task blocking dependencies" }))
+      end
+
+      -- Show tasks blocked by this task (reverse dependencies, always available)
+      if config.mappings.show_blocked_tasks then
+        vim.keymap.set("n", config.mappings.show_blocked_tasks, mappings.show_blocked_tasks,
+          vim.tbl_extend("force", opts_mapping, { desc = "Show tasks blocked by this task" }))
       end
 
       -- Add task as dependency
