@@ -146,7 +146,10 @@ local function refresh_tasks()
 
     -- Fetch blocking tasks in a single query (if enabled)
     if config.enable_reverse_dependencies then
-      local blocking_uuids, _ = task_client.get_blocking_uuids(workspace_rc)
+      local blocking_uuids, blocking_err = task_client.get_blocking_uuids(workspace_rc)
+      if blocking_err then
+        vim.notify("Frontline: " .. blocking_err, vim.log.levels.WARN)
+      end
       for _, task in ipairs(tasks) do
         task._reverse_deps = (blocking_uuids and blocking_uuids[task.uuid]) and { true } or {}
       end

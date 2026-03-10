@@ -74,7 +74,13 @@ function M.get_blocking_uuids(workspace_rc)
     return nil, string.format("Failed to query blocking tasks (exit code %d)", exit_code)
   end
 
-  local ok, parsed_json = pcall(vim.fn.json_decode, stdout)
+  -- Strip TASKRC override messages (same as execute_query)
+  local cleaned_stdout = stdout
+  if workspace_rc then
+    cleaned_stdout = string.gsub(stdout, "^TASKRC override:.-\n", "")
+  end
+
+  local ok, parsed_json = pcall(vim.fn.json_decode, cleaned_stdout)
   if not ok then
     return nil, string.format("Failed to parse blocking tasks JSON: %s", parsed_json)
   end
