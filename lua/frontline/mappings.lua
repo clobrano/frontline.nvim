@@ -1705,10 +1705,8 @@ function M.create_note()
     end
 
     -- Build note content with frontmatter above the title (Obsidian.nvim style)
-    local today = os.date("%Y-%m-%d")
     local content = string.format(
-      "---\nCreated: %s\nTask: (%s)\n---\n\n# %s\n",
-      today,
+      "---\ntask: (%s)\n---\n\n# %s\n",
       short_uuid,
       description
     )
