@@ -128,7 +128,7 @@ local function format_scheduled_date(task, convert_to_local, use_relative)
     local date_str = use_relative
       and (format_relative_date(task.scheduled) or parse_iso_date(task.scheduled, convert_to_local))
       or parse_iso_date(task.scheduled, convert_to_local)
-    return string.format("(%s)", date_str)
+    return string.format("(⏱️%s)", date_str)
   end
   return ""
 end
@@ -139,17 +139,24 @@ local function format_due_date(task, convert_to_local, use_relative)
     local date_str = use_relative
       and (format_relative_date(task.due) or parse_iso_date(task.due, convert_to_local))
       or parse_iso_date(task.due, convert_to_local)
-    return string.format("[%s]", date_str)
+    return string.format("[⏰%s]", date_str)
   end
   return ""
 end
 
 -- Helper to format end date for completed tasks (date only, no time)
-local function format_end_date(task, convert_to_local)
+local function format_end_date(task, convert_to_local, use_relative)
   if task["end"] then
-    local date_str = parse_iso_date(task["end"], convert_to_local)
-    -- Strip time portion, keep only the date (YYYY-MM-DD)
-    return string.match(date_str, "^(%d%d%d%d%-%d%d%-%d%d)") or date_str
+    local date_str
+    if use_relative then
+      date_str = format_relative_date(task["end"])
+    end
+    if not date_str then
+      date_str = parse_iso_date(task["end"], convert_to_local)
+      -- Strip time portion, keep only the date (YYYY-MM-DD)
+      date_str = string.match(date_str, "^(%d%d%d%d%-%d%d%-%d%d)") or date_str
+    end
+    return date_str
   end
   return ""
 end
@@ -221,9 +228,9 @@ function M.format_task(task, convert_to_local, use_relative)
   -- For completed tasks, append end date in curly brackets after the description
   -- and skip the scheduled date
   if task.status == "completed" then
-    local end_date_str = format_end_date(task, convert_to_local)
+    local end_date_str = format_end_date(task, convert_to_local, use_relative)
     if end_date_str ~= "" then
-      description = string.format("%s {%s}", description, end_date_str)
+      description = string.format("%s {✅%s}", description, end_date_str)
     end
   end
 
