@@ -435,7 +435,7 @@ function M.show_blocking_dependencies()
 
   -- Get all dependencies (both complete and incomplete)
   local deps_info = {}
-  for _, dep_uuid in ipairs(task.depends) do
+  for _, dep_uuid in ipairs(task.depends or {}) do
     local dep_cmd = build_task_command(string.format("%s export", dep_uuid), workspace)
     local dep_json = vim.fn.system(dep_cmd)
     dep_json = filter_taskwarrior_messages(dep_json, workspace)
