@@ -86,7 +86,7 @@ describe("Renderer Module", function()
           uuid = "enddate123456789",
           ["end"] = "20260115T143000Z",
         }
-        local expected = "* [x] Completed with End Date {" .. convert_iso_to_local_date_only("20260115T143000Z") .. "} (enddate1)"
+        local expected = "* [x] Completed with End Date {✅" .. convert_iso_to_local_date_only("20260115T143000Z") .. "} (enddate1)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -99,7 +99,7 @@ describe("Renderer Module", function()
           scheduled = "20260110T090000Z",
           ["end"] = "20260115T143000Z",
         }
-        local expected = "* [x] Completed with Scheduled {" .. convert_iso_to_local_date_only("20260115T143000Z") .. "} (compsche)"
+        local expected = "* [x] Completed with Scheduled {✅" .. convert_iso_to_local_date_only("20260115T143000Z") .. "} (compsche)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -113,7 +113,7 @@ describe("Renderer Module", function()
           due = "20260120T000000Z",
           ["end"] = "20260115T143000Z",
         }
-        local expected = "* [x] Completed with All Dates {" .. convert_iso_to_local_date_only("20260115T143000Z") .. "} [" .. convert_iso_to_local("20260120T000000Z") .. "] (compalld)"
+        local expected = "* [x] Completed with All Dates {✅" .. convert_iso_to_local_date_only("20260115T143000Z") .. "} [⏰" .. convert_iso_to_local("20260120T000000Z") .. "] (compalld)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -126,7 +126,7 @@ describe("Renderer Module", function()
           uuid = "abcabcabcabcabca",
         }
         -- Default is convert_to_local = true
-        local expected = "* [ ] Task with Due Date [" .. convert_iso_to_local("20251225T103000Z") .. "] (abcabcab)"
+        local expected = "* [ ] Task with Due Date [⏰" .. convert_iso_to_local("20251225T103000Z") .. "] (abcabcab)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -138,7 +138,7 @@ describe("Renderer Module", function()
           scheduled = "20251220T090000Z",
           uuid = "schedschedsched1",
         }
-        local expected = "* [ ] Task with Scheduled Date (" .. convert_iso_to_local("20251220T090000Z") .. ") (schedsch)"
+        local expected = "* [ ] Task with Scheduled Date (⏱️" .. convert_iso_to_local("20251220T090000Z") .. ") (schedsch)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -151,7 +151,7 @@ describe("Renderer Module", function()
           due = "20251225T103000Z",
           uuid = "bothbothbothbot1",
         }
-        local expected = "* [ ] Task with Both Dates (" .. convert_iso_to_local("20251220T090000Z") .. ") [" .. convert_iso_to_local("20251225T103000Z") .. "] (bothboth)"
+        local expected = "* [ ] Task with Both Dates (⏱️" .. convert_iso_to_local("20251220T090000Z") .. ") [⏰" .. convert_iso_to_local("20251225T103000Z") .. "] (bothboth)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -163,7 +163,7 @@ describe("Renderer Module", function()
           due = "20251225T000000Z",
           uuid = "midnight00000001",
         }
-        local expected = "* [ ] Task with Due Date at Midnight [" .. convert_iso_to_local("20251225T000000Z") .. "] (midnight)"
+        local expected = "* [ ] Task with Due Date at Midnight [⏰" .. convert_iso_to_local("20251225T000000Z") .. "] (midnight)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -175,7 +175,7 @@ describe("Renderer Module", function()
           scheduled = "20251220T000000Z",
           uuid = "schedmidnight001",
         }
-        local expected = "* [ ] Task with Scheduled at Midnight (" .. convert_iso_to_local("20251220T000000Z") .. ") (schedmid)"
+        local expected = "* [ ] Task with Scheduled at Midnight (⏱️" .. convert_iso_to_local("20251220T000000Z") .. ") (schedmid)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -188,7 +188,7 @@ describe("Renderer Module", function()
           due = "20251225T000000Z",
           uuid = "bothmidnight0001",
         }
-        local expected = "* [ ] Both Dates at Midnight (" .. convert_iso_to_local("20251220T000000Z") .. ") [" .. convert_iso_to_local("20251225T000000Z") .. "] (bothmidn)"
+        local expected = "* [ ] Both Dates at Midnight (⏱️" .. convert_iso_to_local("20251220T000000Z") .. ") [⏰" .. convert_iso_to_local("20251225T000000Z") .. "] (bothmidn)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -263,7 +263,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "9999aaaabbbbcccc",
         }
-        local expected = "* [ ] All Icons Task [" .. convert_iso_to_local("20251111T090000Z") .. "] [🟠🔒🗒️] (9999aaaa)"
+        local expected = "* [ ] All Icons Task [⏰" .. convert_iso_to_local("20251111T090000Z") .. "] [🟠🔒🗒️] (9999aaaa)"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -279,7 +279,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "completecomplete",
         }
-        local expected = "* [ ] Complete Task (" .. convert_iso_to_local("20251110T080000Z") .. ") [" .. convert_iso_to_local("20251111T090000Z") .. "] [🔴🔒🗒️] (complete)"
+        local expected = "* [ ] Complete Task (⏱️" .. convert_iso_to_local("20251110T080000Z") .. ") [⏰" .. convert_iso_to_local("20251111T090000Z") .. "] [🔴🔒🗒️] (complete)"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -441,7 +441,7 @@ describe("Renderer Module", function()
             due = iso_date_offset(0),
             uuid = "reltoday00000001",
           }
-          local expected = "* [ ] Due Today [today] (reltoday)"
+          local expected = "* [ ] Due Today [⏰today] (reltoday)"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -452,7 +452,7 @@ describe("Renderer Module", function()
             due = iso_date_offset(1),
             uuid = "reltomrw00000001",
           }
-          local expected = "* [ ] Due Tomorrow [tomorrow] (reltomrw)"
+          local expected = "* [ ] Due Tomorrow [⏰tomorrow] (reltomrw)"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -463,7 +463,7 @@ describe("Renderer Module", function()
             due = iso_date_offset(-1),
             uuid = "relyest000000001",
           }
-          local expected = "* [ ] Due Yesterday [yesterday] (relyest0)"
+          local expected = "* [ ] Due Yesterday [⏰yesterday] (relyest0)"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -474,7 +474,7 @@ describe("Renderer Module", function()
             due = iso_date_offset(3),
             uuid = "reldays000000001",
           }
-          local expected = "* [ ] Due In Days [" .. expected_relative(3) .. "] (reldays0)"
+          local expected = "* [ ] Due In Days [⏰" .. expected_relative(3) .. "] (reldays0)"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -485,7 +485,7 @@ describe("Renderer Module", function()
             due = iso_date_offset(-3),
             uuid = "relndays00000001",
           }
-          local expected = "* [ ] Overdue Days [" .. expected_relative(-3) .. "] (relndays)"
+          local expected = "* [ ] Overdue Days [⏰" .. expected_relative(-3) .. "] (relndays)"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -496,7 +496,7 @@ describe("Renderer Module", function()
             due = iso_date_offset(14),
             uuid = "relweeks00000001",
           }
-          local expected = "* [ ] Due In Weeks [" .. expected_relative(14) .. "] (relweeks)"
+          local expected = "* [ ] Due In Weeks [⏰" .. expected_relative(14) .. "] (relweeks)"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -507,7 +507,7 @@ describe("Renderer Module", function()
             due = iso_date_offset(-14),
             uuid = "relnweeks0000001",
           }
-          local expected = "* [ ] Overdue Weeks [" .. expected_relative(-14) .. "] (relnweek)"
+          local expected = "* [ ] Overdue Weeks [⏰" .. expected_relative(-14) .. "] (relnweek)"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -518,7 +518,7 @@ describe("Renderer Module", function()
             due = iso_date_offset(60),
             uuid = "relmonth00000001",
           }
-          local expected = "* [ ] Due In Months [" .. expected_relative(60) .. "] (relmonth)"
+          local expected = "* [ ] Due In Months [⏰" .. expected_relative(60) .. "] (relmonth)"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -529,7 +529,7 @@ describe("Renderer Module", function()
             due = iso_date_offset(-60),
             uuid = "relnmonth0000001",
           }
-          local expected = "* [ ] Overdue Months [" .. expected_relative(-60) .. "] (relnmont)"
+          local expected = "* [ ] Overdue Months [⏰" .. expected_relative(-60) .. "] (relnmont)"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -540,7 +540,7 @@ describe("Renderer Module", function()
             scheduled = iso_date_offset(7),
             uuid = "relschedfut00001",
           }
-          local expected = "* [ ] Scheduled Relative (" .. expected_relative(7) .. ") (relsched)"
+          local expected = "* [ ] Scheduled Relative (⏱️" .. expected_relative(7) .. ") (relsched)"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -552,7 +552,7 @@ describe("Renderer Module", function()
             due = iso_date_offset(7),
             uuid = "relboth000000001",
           }
-          local expected = "* [ ] Both Relative (" .. expected_relative(3) .. ") [" .. expected_relative(7) .. "] (relboth0)"
+          local expected = "* [ ] Both Relative (⏱️" .. expected_relative(3) .. ") [⏰" .. expected_relative(7) .. "] (relboth0)"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -570,16 +570,27 @@ describe("Renderer Module", function()
           assert.is_nil(result:find("weeks"))
         end)
 
-        it("should not apply relative format to end date of completed tasks", function()
+        it("should apply relative format to end date of completed tasks", function()
           local task = {
             description = "Completed Task",
             status = "completed",
             uuid = "relcomplt0000001",
             ["end"] = iso_date_offset(-5),
           }
-          -- End date always shows absolute date regardless of use_relative
           local result = renderer.format_task(task, true, true)
-          assert.is_true(result:find("{%d%d%d%d%-%d%d%-%d%d}") ~= nil)
+          local expected = "* [x] Completed Task {✅" .. expected_relative(-5) .. "} (relcompl)"
+          assert.are.same(expected, result)
+        end)
+
+        it("should show absolute end date when use_relative is false", function()
+          local task = {
+            description = "Completed Absolute",
+            status = "completed",
+            uuid = "relcompabs000001",
+            ["end"] = iso_date_offset(-5),
+          }
+          local result = renderer.format_task(task, true, false)
+          assert.is_true(result:find("{✅%d%d%d%d%-%d%d%-%d%d}") ~= nil)
         end)
       end)
 
@@ -592,7 +603,7 @@ describe("Renderer Module", function()
             due = "20251225T103000Z",
             uuid = "conversiontest01",
           }
-          local expected = "* [ ] Task with conversion [" .. convert_iso_to_local("20251225T103000Z") .. "] (conversi)"
+          local expected = "* [ ] Task with conversion [⏰" .. convert_iso_to_local("20251225T103000Z") .. "] (conversi)"
           assert.are.same(expected, renderer.format_task(task, true))
         end)
 
@@ -604,7 +615,7 @@ describe("Renderer Module", function()
             due = "20251225T103000Z",
             uuid = "noconversionte01",
           }
-          local expected = "* [ ] Task without conversion [" .. format_iso_date_raw("20251225T103000Z") .. "] (noconver)"
+          local expected = "* [ ] Task without conversion [⏰" .. format_iso_date_raw("20251225T103000Z") .. "] (noconver)"
           assert.are.same(expected, renderer.format_task(task, false))
         end)
 
@@ -616,7 +627,7 @@ describe("Renderer Module", function()
             due = "20251225T000000Z",
             uuid = "midnighttest001",
           }
-          local expected = "* [ ] Midnight after conversion [" .. convert_iso_to_local("20251225T000000Z") .. "] (midnight)"
+          local expected = "* [ ] Midnight after conversion [⏰" .. convert_iso_to_local("20251225T000000Z") .. "] (midnight)"
           assert.are.same(expected, renderer.format_task(task, true))
         end)
 
@@ -629,7 +640,7 @@ describe("Renderer Module", function()
             uuid = "midnightnoconv1",
           }
           -- Midnight in UTC (00:00) should be omitted
-          local expected = "* [ ] Midnight without conversion [2025-12-25] (midnight)"
+          local expected = "* [ ] Midnight without conversion [⏰2025-12-25] (midnight)"
           assert.are.same(expected, renderer.format_task(task, false))
         end)
       end)
