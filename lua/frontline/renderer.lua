@@ -204,6 +204,11 @@ local function get_extra_icons(task)
     table.insert(icons, "🗒️")
   end
 
+  -- Recurring child instances carry a 'recur' field (templates are already filtered out)
+  if task.recur then
+    table.insert(icons, "🔁")
+  end
+
   if #icons > 0 then
     return string.format("[%s]", table.concat(icons))
   end

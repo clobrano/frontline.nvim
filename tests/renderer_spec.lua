@@ -354,6 +354,18 @@ describe("Renderer Module", function()
           assert.are.same(expected, renderer.format_task(task))
         end)
 
+        it("should show recurring icon for tasks with a recur field", function()
+          local task = {
+            description = "Weekly recurring task",
+            status = "pending",
+            uuid = "recurringtask12",
+            recur = "weekly",
+            _reverse_deps = {}
+          }
+          local expected = "* [ ] Weekly recurring task [🔁] (recurrin)"
+          assert.are.same(expected, renderer.format_task(task))
+        end)
+
         it("should show all icons in correct order", function()
           local task = {
             description = "Complete icon task",
@@ -362,10 +374,11 @@ describe("Renderer Module", function()
             priority = "H",
             depends = {"dep1"},
             _reverse_deps = {{uuid = "rev1"}},
-            annotations = {{description = "note"}}
+            annotations = {{description = "note"}},
+            recur = "monthly"
           }
-          -- Order: priority, lock, anchor, annotations
-          local expected = "* [ ] Complete icon task [🔴🔒⚓🗒️] (allicons)"
+          -- Order: priority, lock, anchor, annotations, recurring
+          local expected = "* [ ] Complete icon task [🔴🔒⚓🗒️🔁] (allicons)"
           assert.are.same(expected, renderer.format_task(task))
         end)
 
