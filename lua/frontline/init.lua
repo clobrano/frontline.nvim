@@ -144,6 +144,16 @@ local function refresh_tasks()
       return
     end
 
+    -- Exclude recurring task templates (status:recurring); they are internal
+    -- Taskwarrior templates used to spawn child instances, not actionable items.
+    local non_recurring = {}
+    for _, task in ipairs(tasks) do
+      if task.status ~= "recurring" then
+        table.insert(non_recurring, task)
+      end
+    end
+    tasks = non_recurring
+
     -- Fetch blocking tasks in a single query (if enabled)
     if config.enable_reverse_dependencies then
       local blocking_uuids, blocking_err = task_client.get_blocking_uuids(workspace_rc)
