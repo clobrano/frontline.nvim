@@ -185,7 +185,10 @@ function M.get_priority_suggestions()
 end
 
 -- Parse the current line to determine what kind of completion is needed
--- Returns: completion_type, prefix
+-- Returns: completion_type, prefix, attr_key
+-- attr_key is the literal attribute prefix (e.g. "project:", "@", "+") that
+-- must be prepended to each suggestion so that the returned items correctly
+-- replace arglead in both native Neovim completion and third-party plugins.
 local function parse_completion_context(line, col)
   -- Get the text before cursor
   local text_before = string.sub(line, 1, col)
@@ -193,57 +196,57 @@ local function parse_completion_context(line, col)
   -- Check for workspace (@)
   local workspace_match = string.match(text_before, "@([%w_%-]*)$")
   if workspace_match ~= nil then
-    return "workspace", workspace_match
+    return "workspace", workspace_match, "@"
   end
 
   -- Check for project (project:)
   local project_match = string.match(text_before, "project:([%w%.%-_]*)$")
   if project_match ~= nil then
-    return "project", project_match
+    return "project", project_match, "project:"
   end
 
   -- Check for tag add (+) or tag remove (-)
   local tag_match = string.match(text_before, "%+([%w_%-]*)$")
   if tag_match ~= nil then
-    return "tag", tag_match
+    return "tag", tag_match, "+"
   end
 
   local tag_remove_match = string.match(text_before, "%-([%w_%-]*)$")
   if tag_remove_match ~= nil then
-    return "tag", tag_remove_match
+    return "tag", tag_remove_match, "-"
   end
 
   -- Check for due date
   local due_match = string.match(text_before, "due:([%w%-]*)$")
   if due_match ~= nil then
-    return "date", due_match
+    return "date", due_match, "due:"
   end
 
   -- Check for scheduled date
   local scheduled_match = string.match(text_before, "scheduled:([%w%-]*)$")
   if scheduled_match ~= nil then
-    return "date", scheduled_match
+    return "date", scheduled_match, "scheduled:"
   end
 
   -- Check for wait date
   local wait_match = string.match(text_before, "wait:([%w%-]*)$")
   if wait_match ~= nil then
-    return "date", wait_match
+    return "date", wait_match, "wait:"
   end
 
   -- Check for depends (task UUID prefix)
   local depends_match = string.match(text_before, "depends:([%w%-]*)$")
   if depends_match ~= nil then
-    return "task_id", depends_match
+    return "task_id", depends_match, "depends:"
   end
 
   -- Check for priority
   local priority_match = string.match(text_before, "priority:([HML]*)$")
   if priority_match ~= nil then
-    return "priority", priority_match
+    return "priority", priority_match, "priority:"
   end
 
-  return nil, nil
+  return nil, nil, nil
 end
 
 -- Filter suggestions based on prefix
@@ -291,7 +294,7 @@ end
 -- cursorpos: the cursor position in the command line
 function M.complete_task_input(arglead, cmdline, cursorpos)
   -- Get completion context
-  local comp_type, prefix = parse_completion_context(cmdline, cursorpos)
+  local comp_type, prefix, attr_key = parse_completion_context(cmdline, cursorpos)
 
   if not comp_type then
     return {}
@@ -352,7 +355,15 @@ function M.complete_task_input(arglead, cmdline, cursorpos)
   -- Filter suggestions based on what user has typed
   local filtered = filter_suggestions(suggestions, prefix)
 
-  return filtered
+  -- Prepend the attribute key (e.g. "project:", "@", "+") to each item so
+  -- the returned strings exactly replace arglead.  Without this, completion
+  -- plugins that append items to the already-typed text would produce
+  -- duplicated prefixes such as "project:M8s.M8s.SBR" for a project "M8s.SBR".
+  local result = {}
+  for _, suggestion in ipairs(filtered) do
+    table.insert(result, attr_key .. suggestion)
+  end
+  return result
 end
 
 -- Setup completion for the plugin
