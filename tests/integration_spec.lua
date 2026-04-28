@@ -275,6 +275,36 @@ describe("Integration Tests: Automatic and Manual Refresh", function()
     assert.truthy(string.find(buffer_lines[4], "Low urgency task"), "Third task should be lowest urgency")
   end)
 
+  it("should not display recurring task templates in views", function()
+    local initial_content = {
+      "# My Tasks | status:any",
+      "",
+    }
+    test_utils.set_mock_buffer_content(initial_content)
+
+    local mock_task_output = vim.fn.json_encode({
+      {id=1, description="Regular task",   status="pending",   uuid="reg11111111111111", urgency=5.0},
+      {id=2, description="Recurring tmpl", status="recurring", uuid="recur222222222222", urgency=0.0},
+    })
+
+    task_client._set_run_shell_command_mock(function(cmd)
+      if string.find(cmd, "status:any") then
+        return mock_task_output, 0
+      elseif string.find(cmd, "depends.any:") then
+        return '[]', 0
+      end
+      return '[]', 0
+    end)
+
+    plugin.refresh_current_buffer()
+
+    local buffer_lines = test_utils.mock_buffer_content
+    assert.truthy(string.find(buffer_lines[2], "Regular task"), "Regular task should be displayed")
+    for _, line in ipairs(buffer_lines) do
+      assert.is_falsy(string.find(line, "Recurring tmpl"), "Recurring template should not be displayed")
+    end
+  end)
+
   it("should sort tasks with missing urgency field last", function()
     local initial_content = {
       "# My Tasks | status:pending",
