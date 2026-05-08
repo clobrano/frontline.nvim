@@ -249,7 +249,7 @@ function M.toggle_done()
     vim.notify("Reopening task...", vim.log.levels.INFO)
 
     if execute_task_command(string.format("%s modify status:pending", hash), workspace) then
-      require("frontline").refresh_current_buffer()
+      require("frontline").refresh_current_buffer(hash)
     end
   else
     -- Check for TODO annotations if feature is enabled
@@ -353,13 +353,13 @@ function M.toggle_done()
               vim.notify("All tasks marked as done", vim.log.levels.INFO)
             end
 
-            require("frontline").refresh_current_buffer()
+            require("frontline").refresh_current_buffer(hash)
           elseif idx == 3 then
             -- Mark task done, ignore dependencies
             vim.notify("Marking task as done (ignoring dependencies)...", vim.log.levels.INFO)
 
             if execute_task_command(string.format("%s done", hash), workspace) then
-              require("frontline").refresh_current_buffer()
+              require("frontline").refresh_current_buffer(hash)
             end
           end
         end
@@ -369,7 +369,7 @@ function M.toggle_done()
       vim.notify("Marking task as done...", vim.log.levels.INFO)
 
       if execute_task_command(string.format("%s done", hash), workspace) then
-        require("frontline").refresh_current_buffer()
+        require("frontline").refresh_current_buffer(hash)
       end
     end
   end
@@ -677,7 +677,7 @@ function M.create_dependency_with_input(input)
 
   if execute_task_command(string.format("%s modify depends:%s", hash, new_uuid), workspace) then
     vim.notify(string.format("Created task %s as dependency", new_task_id), vim.log.levels.INFO)
-    require("frontline").refresh_current_buffer()
+    require("frontline").refresh_current_buffer(hash)
   end
 
   -- Clear the parent task info
@@ -786,8 +786,7 @@ function M.toggle_started()
   end
 
   if execute_task_command(task_args, workspace) then
-    -- Refresh the buffer
-    require("frontline").refresh_current_buffer()
+    require("frontline").refresh_current_buffer(hash)
   end
 end
 
@@ -810,7 +809,7 @@ function M.modify_task_with_input(input)
   vim.notify("Modifying task...", vim.log.levels.INFO)
 
   if execute_task_command(string.format("%s modify %s", hash, input), workspace) then
-    require("frontline").refresh_current_buffer()
+    require("frontline").refresh_current_buffer(hash)
   end
 end
 
@@ -915,8 +914,7 @@ function M.add_annotation()
     vim.notify("Adding annotation...", vim.log.levels.INFO)
 
     if execute_task_command(string.format("%s annotate '%s'", hash, input:gsub("'", "'\\'''")), workspace) then
-      -- Refresh the buffer
-      require("frontline").refresh_current_buffer()
+      require("frontline").refresh_current_buffer(hash)
     end
   end)
 end
@@ -994,9 +992,8 @@ function M.edit_task()
         vim.notify("Task updated", vim.log.levels.INFO)
         -- Close the terminal window
         vim.cmd("close")
-        -- Refresh the buffer
         vim.schedule(function()
-          require("frontline").refresh_current_buffer()
+          require("frontline").refresh_current_buffer(hash)
         end)
       else
         vim.notify("Task edit cancelled or failed", vim.log.levels.WARN)
@@ -1728,8 +1725,7 @@ function M.create_note()
       vim.notify("Note file created but failed to add annotation to task", vim.log.levels.WARN)
     end
 
-    -- Refresh the buffer to show the annotation icon
-    require("frontline").refresh_current_buffer()
+    require("frontline").refresh_current_buffer(hash)
 
     -- Open the note in Neovim
     vim.cmd("edit " .. vim.fn.fnameescape(full_path))
