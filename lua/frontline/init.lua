@@ -213,9 +213,23 @@ local function refresh_tasks()
   end
 end
 
--- Expose refresh function for mappings to use
-function M.refresh_current_buffer()
+-- Expose refresh function for mappings to use.
+-- If task_hash is provided, the cursor is moved to the line containing that
+-- hash after the refresh, so the task stays visible even if its urgency
+-- changed and it was re-sorted to a different position.
+function M.refresh_current_buffer(task_hash)
   refresh_tasks()
+  if task_hash then
+    local bufnr = vim.api.nvim_get_current_buf()
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local search_str = "(" .. task_hash .. ")"
+    for lnum, line in ipairs(lines) do
+      if line:find(search_str, 1, true) then
+        vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+        break
+      end
+    end
+  end
 end
 
 function M.setup(opts)
