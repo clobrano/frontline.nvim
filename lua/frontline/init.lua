@@ -36,6 +36,7 @@ local config = {
     copy_task = "<leader>tc",
     open_url = "<leader>to",
     create_note = "<leader>tj",
+    add_todo_annotation = "<leader>tt",
   },
 }
 
@@ -351,6 +352,12 @@ function M.setup(opts)
       if config.mappings.create_note then
         vim.keymap.set("n", config.mappings.create_note, mappings.create_note,
           vim.tbl_extend("force", opts_mapping, { desc = "Create markdown note from task" }))
+      end
+
+      -- Add TODO annotation
+      if config.mappings.add_todo_annotation then
+        vim.keymap.set("n", config.mappings.add_todo_annotation, mappings.add_todo_annotation,
+          vim.tbl_extend("force", opts_mapping, { desc = "Add TODO annotation to task" }))
       end
     end,
     group = vim.api.nvim_create_augroup("FrontlineMappings", { clear = true }),
