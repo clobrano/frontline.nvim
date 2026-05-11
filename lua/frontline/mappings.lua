@@ -919,6 +919,29 @@ function M.add_annotation()
   end)
 end
 
+-- Add a TODO annotation (pre-filled with "TODO: ") to the task under cursor
+function M.add_todo_annotation()
+  local hash = M.get_task_hash_under_cursor()
+  if not hash then
+    return
+  end
+
+  local workspace = require("frontline").get_current_workspace()
+
+  vim.ui.input({ prompt = "TODO annotation: ", default = "TODO: " }, function(input)
+    if not input or input == "" then
+      vim.notify("Annotation cancelled", vim.log.levels.INFO)
+      return
+    end
+
+    vim.notify("Adding TODO annotation...", vim.log.levels.INFO)
+
+    if execute_task_command(string.format("%s annotate '%s'", hash, input:gsub("'", "'\\'''")), workspace) then
+      require("frontline").refresh_current_buffer(hash)
+    end
+  end)
+end
+
 -- Copy task description and short UUID to clipboard
 function M.copy_task()
   local hash = M.get_task_hash_under_cursor()
