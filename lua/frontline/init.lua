@@ -218,21 +218,31 @@ end
 -- If task_hash is provided, the cursor is moved to the line containing that
 -- hash after the refresh, so the task stays visible even if its urgency
 -- changed and it was re-sorted to a different position.
--- The pre-refresh position is pushed to Neovim's jumplist so the user can
--- return to it with <C-o>.
+-- When the task moves to a different line, the original cursor position is
+-- pushed to Neovim's jumplist so the user can return with <C-o>.
 function M.refresh_current_buffer(task_hash)
-  if task_hash then
-    -- Push current position to jumplist before the task potentially relocates,
-    -- allowing the user to return with <C-o>.
-    vim.cmd("normal! m'")
-  end
+  -- Save position before refresh. We cannot use m' here because nvim_buf_set_lines
+  -- will rewrite the section and Neovim adjusts marks within the replaced range,
+  -- causing the saved line to drift. Instead we record the line explicitly and
+  -- set the jumplist entry after the refresh is complete.
+  local saved_pos = task_hash and vim.api.nvim_win_get_cursor(0) or nil
+
   refresh_tasks()
+
   if task_hash then
     local bufnr = vim.api.nvim_get_current_buf()
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local search_str = "(" .. task_hash .. ")"
     for lnum, line in ipairs(lines) do
       if line:find(search_str, 1, true) then
+        if saved_pos and lnum ~= saved_pos[1] then
+          -- Task moved: pin the original line into the jumplist by momentarily
+          -- placing the cursor there and calling m'. Neovim does not render
+          -- between synchronous API calls so there is no visible flicker.
+          local pinned_line = math.min(saved_pos[1], #lines)
+          vim.api.nvim_win_set_cursor(0, { pinned_line, saved_pos[2] })
+          vim.cmd("normal! m'")
+        end
         vim.api.nvim_win_set_cursor(0, { lnum, 0 })
         break
       end
