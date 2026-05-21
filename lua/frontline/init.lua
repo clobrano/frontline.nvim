@@ -218,7 +218,14 @@ end
 -- If task_hash is provided, the cursor is moved to the line containing that
 -- hash after the refresh, so the task stays visible even if its urgency
 -- changed and it was re-sorted to a different position.
+-- The pre-refresh position is pushed to Neovim's jumplist so the user can
+-- return to it with <C-o>.
 function M.refresh_current_buffer(task_hash)
+  if task_hash then
+    -- Push current position to jumplist before the task potentially relocates,
+    -- allowing the user to return with <C-o>.
+    vim.cmd("normal! m'")
+  end
   refresh_tasks()
   if task_hash then
     local bufnr = vim.api.nvim_get_current_buf()
