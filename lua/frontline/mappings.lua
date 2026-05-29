@@ -1834,4 +1834,122 @@ function M.open_url()
   end
 end
 
+-- Copy selected fields from the current task via a floating multi-select window.
+-- Options: name (description), namespace (project), name & namespace combined.
+function M.copy_field()
+  local hash = M.get_task_hash_under_cursor()
+  if not hash then
+    return
+  end
+
+  local workspace = require("frontline").get_current_workspace()
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
+  local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Failed to get task information", vim.log.levels.ERROR)
+    return
+  end
+
+  local ok, tasks = pcall(vim.fn.json_decode, task_json)
+  if not ok or not tasks or #tasks == 0 then
+    vim.notify("Failed to parse task data", vim.log.levels.ERROR)
+    return
+  end
+
+  local task = tasks[1]
+  local name = task.description or ""
+  local namespace = task.project or ""
+
+  -- Build menu lines
+  local options = {
+    { label = "name",             value = name },
+    { label = "namespace",        value = namespace },
+    { label = "name & namespace", value = namespace ~= "" and string.format("%s --namespace %s", name, namespace) or name },
+  }
+
+  local menu_lines = {}
+  for i, opt in ipairs(options) do
+    menu_lines[i] = string.format("  [ ] %s", opt.label)
+  end
+  table.insert(menu_lines, "")
+  table.insert(menu_lines, "  <Space> toggle  <CR> copy  <Esc>/<q> cancel")
+
+  -- Create floating window
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, menu_lines)
+  vim.api.nvim_buf_set_option(buf, "modifiable", false)
+  vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
+
+  local width = 50
+  local height = #menu_lines
+  local row = math.floor((vim.o.lines - height) / 2)
+  local col = math.floor((vim.o.columns - width) / 2)
+
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = row,
+    col = col,
+    style = "minimal",
+    border = "rounded",
+    title = " Copy task field ",
+    title_pos = "center",
+  })
+
+  vim.api.nvim_win_set_option(win, "cursorline", true)
+  vim.api.nvim_win_set_cursor(win, { 1, 0 })
+
+  local selected = {}
+
+  local function redraw()
+    vim.api.nvim_buf_set_option(buf, "modifiable", true)
+    for i, opt in ipairs(options) do
+      local mark = selected[i] and "[x]" or "[ ]"
+      menu_lines[i] = string.format("  %s %s", mark, opt.label)
+    end
+    vim.api.nvim_buf_set_lines(buf, 0, #options, false, { unpack(menu_lines, 1, #options) })
+    vim.api.nvim_buf_set_option(buf, "modifiable", false)
+  end
+
+  local function close()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+  end
+
+  local function confirm()
+    local parts = {}
+    for i, opt in ipairs(options) do
+      if selected[i] then
+        table.insert(parts, opt.value)
+      end
+    end
+    close()
+    if #parts == 0 then
+      vim.notify("Nothing selected", vim.log.levels.INFO)
+      return
+    end
+    local text = table.concat(parts, "\n")
+    vim.fn.setreg("+", text)
+    vim.notify(string.format("Copied: %s", text), vim.log.levels.INFO)
+  end
+
+  local map_opts = { noremap = true, silent = true, buffer = buf, nowait = true }
+
+  vim.keymap.set("n", "<Space>", function()
+    local row_idx = vim.api.nvim_win_get_cursor(win)[1]
+    if row_idx <= #options then
+      selected[row_idx] = not selected[row_idx]
+      redraw()
+    end
+  end, map_opts)
+
+  vim.keymap.set("n", "<CR>", confirm, map_opts)
+  vim.keymap.set("n", "<Esc>", close, map_opts)
+  vim.keymap.set("n", "q", close, map_opts)
+end
+
 return M

@@ -34,6 +34,7 @@ local config = {
     undo_task = "<leader>tu",
     create_task = "<leader>tn",
     copy_task = "<leader>tc",
+    copy_field = "c",
     open_url = "<leader>to",
     create_note = "<leader>tj",
     add_todo_annotation = "<leader>tt",
@@ -357,6 +358,12 @@ function M.setup(opts)
       if config.mappings.copy_task then
         vim.keymap.set("n", config.mappings.copy_task, mappings.copy_task,
           vim.tbl_extend("force", opts_mapping, { desc = "Copy task description and short UUID to clipboard" }))
+      end
+
+      -- Copy selected task fields via floating picker
+      if config.mappings.copy_field then
+        vim.keymap.set("n", config.mappings.copy_field, mappings.copy_field,
+          vim.tbl_extend("force", opts_mapping, { desc = "Copy task fields via floating picker" }))
       end
 
       -- Open URL from task annotations
