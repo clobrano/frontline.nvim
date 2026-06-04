@@ -232,7 +232,7 @@ function M.refresh_current_buffer(task_hash)
   if task_hash then
     local bufnr = vim.api.nvim_get_current_buf()
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local search_str = "(" .. task_hash .. ")"
+    local search_str = "`" .. task_hash .. "`"
     for lnum, line in ipairs(lines) do
       if line:find(search_str, 1, true) then
         if saved_pos and lnum ~= saved_pos[1] then

@@ -15,12 +15,12 @@ function M.set_config(new_config)
 end
 
 -- Extract task hash from the current line
--- Expected format: * [status] description ... (hash)
+-- Expected format: * [status] description ... `hash`
 function M.get_task_hash_under_cursor()
   local line = vim.api.nvim_get_current_line()
 
-  -- Match the hash pattern at the end: (xxxxxxxx)
-  local hash = string.match(line, "%(([a-f0-9]+)%)%s*$")
+  -- Match the hash pattern at the end: `xxxxxxxx`
+  local hash = string.match(line, "`([a-f0-9]+)`%s*$")
 
   if not hash then
     vim.notify("No task hash found on current line", vim.log.levels.WARN)
@@ -974,8 +974,7 @@ function M.copy_task()
   local description = task.description or "Unknown task"
   local short_uuid = string.sub(task.uuid, 1, 8)
 
-  -- Format as "description (short_uuid)"
-  local text_to_copy = string.format("%s (%s)", description, short_uuid)
+  local text_to_copy = string.format("%s `%s`", description, short_uuid)
 
   -- Copy to system clipboard (+ register)
   vim.fn.setreg('+', text_to_copy)
