@@ -259,7 +259,7 @@ function M.format_task(task, convert_to_local, use_relative)
     table.insert(parts, extra_icons_str)
   end
 
-  table.insert(parts, string.format("(%s)", short_hash))
+  table.insert(parts, string.format("(`%s`)", short_hash))
 
   return table.concat(parts, " ")
 end
