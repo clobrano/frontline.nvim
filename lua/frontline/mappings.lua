@@ -19,8 +19,7 @@ end
 function M.get_task_hash_under_cursor()
   local line = vim.api.nvim_get_current_line()
 
-  -- Match the hash pattern at the end: `xxxxxxxx`
-  local hash = string.match(line, "`([a-f0-9]+)`%s*$")
+  local hash = string.match(line, "`([a-f0-9]+)`")
 
   if not hash then
     vim.notify("No task hash found on current line", vim.log.levels.WARN)
