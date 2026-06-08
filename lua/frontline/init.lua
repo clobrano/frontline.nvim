@@ -47,7 +47,7 @@ local current_workspace = nil
 local function resolve_workspace_rc(entry)
   if type(entry) == "string" then
     return vim.fn.expand(entry)
-  elseif type(entry) == "table" and entry.rc then
+  elseif type(entry) == "table" and type(entry.rc) == "string" then
     return vim.fn.expand(entry.rc)
   end
   return nil

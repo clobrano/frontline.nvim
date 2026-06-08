@@ -75,7 +75,7 @@ local function get_workspace_rc_with_override(workspace_override)
   -- Use override if provided, otherwise use current workspace
   local workspace = workspace_override or frontline.get_current_workspace()
 
-  if not workspace then
+  if not workspace or type(workspace) ~= "string" then
     return nil
   end
 
