@@ -974,7 +974,7 @@ function M.copy_task()
   local short_uuid = string.sub(task.uuid, 1, 8)
 
   -- Format as "description (short_uuid)"
-  local text_to_copy = string.format("%s (%s)", description, short_uuid)
+  local text_to_copy = string.format("%s `%s`", description, short_uuid)
 
   -- Copy to system clipboard (+ register)
   vim.fn.setreg('+', text_to_copy)
@@ -1725,7 +1725,7 @@ function M.create_note()
 
     -- Build note content with frontmatter above the title (Obsidian.nvim style)
     local content = string.format(
-      "---\ntask: (%s)\n---\n\n# %s\n",
+      "---\ntask: `%s`\n---\n\n# %s\n",
       short_uuid,
       description
     )
