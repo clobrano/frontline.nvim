@@ -790,6 +790,25 @@ function M.toggle_started()
 end
 
 -- Modify a task with the given input string (called by FrontlineModifyTask command)
+-- Extract "annotate ..." from input, returning the annotation text and remaining input.
+-- Supports: annotate "text", annotate 'text', annotate text-without-spaces
+local function extract_annotation(input)
+  local patterns = {
+    { pattern = 'annotate%s+"(.-)"', full = 'annotate%s+".-"' },
+    { pattern = "annotate%s+'(.-)'", full = "annotate%s+'.-'" },
+    { pattern = "annotate%s+(%S+)",  full = "annotate%s+%S+" },
+  }
+  for _, p in ipairs(patterns) do
+    local text = input:match(p.pattern)
+    if text then
+      local remaining = input:gsub(p.full, "", 1)
+      remaining = remaining:match("^%s*(.-)%s*$") or ""
+      return text, remaining
+    end
+  end
+  return nil, input
+end
+
 function M.modify_task_with_input(input)
   if not modify_task_hash then
     vim.notify("No task set for modification", vim.log.levels.ERROR)
@@ -805,9 +824,21 @@ function M.modify_task_with_input(input)
     return
   end
 
+  local annotation, modify_args = extract_annotation(input)
+
   vim.notify("Modifying task...", vim.log.levels.INFO)
 
-  if execute_task_command(string.format("%s modify %s", hash, input), workspace) then
+  local ok = true
+  if modify_args ~= "" then
+    ok = execute_task_command(string.format("%s modify %s", hash, modify_args), workspace)
+  end
+
+  if ok and annotation then
+    local escaped = annotation:gsub("'", "'\\''")
+    ok = execute_task_command(string.format("%s annotate '%s'", hash, escaped), workspace)
+  end
+
+  if ok then
     require("frontline").refresh_current_buffer(hash)
   end
 end
