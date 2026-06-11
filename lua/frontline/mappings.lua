@@ -791,22 +791,15 @@ end
 
 -- Modify a task with the given input string (called by FrontlineModifyTask command)
 -- Extract "annotate ..." from input, returning the annotation text and remaining input.
--- Supports: annotate "text", annotate 'text', annotate text-without-spaces
+-- Everything after "annotate" is treated as the annotation text (with optional surrounding quotes stripped).
 local function extract_annotation(input)
-  local patterns = {
-    { pattern = 'annotate%s+"(.-)"', full = 'annotate%s+".-"' },
-    { pattern = "annotate%s+'(.-)'", full = "annotate%s+'.-'" },
-    { pattern = "annotate%s+(%S+)",  full = "annotate%s+%S+" },
-  }
-  for _, p in ipairs(patterns) do
-    local text = input:match(p.pattern)
-    if text then
-      local remaining = input:gsub(p.full, "", 1)
-      remaining = remaining:match("^%s*(.-)%s*$") or ""
-      return text, remaining
-    end
+  local before, raw_text = input:match("^(.-)%s*annotate%s+(.+)$")
+  if not raw_text then
+    return nil, input
   end
-  return nil, input
+  local text = raw_text:match('^"(.*)"$') or raw_text:match("^'(.*)'$") or raw_text
+  local remaining = (before or ""):match("^%s*(.-)%s*$") or ""
+  return text, remaining
 end
 
 function M.modify_task_with_input(input)
