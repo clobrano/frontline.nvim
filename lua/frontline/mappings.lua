@@ -995,7 +995,7 @@ local function render_copy_template(format_str, task)
     urgency = task.urgency and tostring(task.urgency) or "",
   }
 
-  local result = format_str:gsub("{{%s*(%w+)%s*}}", function(key)
+  local result = format_str:gsub("{{%s*([%w_]+)%s*}}", function(key)
     return replacements[key] or ""
   end)
 
