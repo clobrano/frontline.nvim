@@ -258,6 +258,7 @@ require('frontline').setup({
 | `default_workspace` | string | `nil` | Default workspace name (nil uses system taskwarrior) |
 | `enable_reverse_dependencies` | boolean | true | Enable reverse dependency tracking (⚓ icon and "tasks this task is blocking" view) |
 | `reverse_dependencies_warn_threshold` | number | 1000 | Warn if reverse dependency queries take longer than this (in milliseconds). Set to 0 to disable warnings. |
+| `copy_task_format` | string | `"{{description}}"` | Template for the `<leader>tc` copy-to-clipboard action. See [Copy Task Format](#copy-task-format) below. |
 | `mappings.toggle_done` | string | `"<leader>td"` | Keybinding to toggle task done/undone |
 | `mappings.toggle_started` | string | `"<leader>ts"` | Keybinding to toggle task started/unstarted |
 | `mappings.modify_task` | string | `"<leader>tm"` | Keybinding to modify task |
@@ -280,6 +281,38 @@ require('frontline').setup({
   },
 })
 ```
+
+### Copy Task Format
+
+The `copy_task_format` option controls what gets copied to the clipboard when you press `<leader>tc`. It uses a Jinja-like `{{placeholder}}` syntax:
+
+```lua
+require('frontline').setup({
+  -- Examples:
+  copy_task_format = "{{description}}",                                   -- default
+  copy_task_format = "* [ ] {{description}}",                             -- bullet + checkbox
+  copy_task_format = "* [ ] {{description}} +{{project}} due:{{due}}",    -- full detail
+  copy_task_format = "{{description}} {{tags}}",                          -- with tags
+  copy_task_format = "{{description}} `{{short_uuid}}`",                  -- with short hash
+})
+```
+
+Available placeholders:
+
+| Placeholder | Description | Example |
+|-------------|-------------|---------|
+| `{{description}}` | Task description | `Fix the login bug` |
+| `{{uuid}}` | Full UUID | `abcdef12-3456-...` |
+| `{{short_uuid}}` | First 8 chars of UUID | `abcdef12` |
+| `{{status}}` | Task status | `pending` |
+| `{{project}}` | Project name | `work` |
+| `{{priority}}` | Priority level | `H`, `M`, or `L` |
+| `{{tags}}` | Space-separated tags | `urgent backend` |
+| `{{due}}` | Due date | `2025-12-25 10:30` |
+| `{{scheduled}}` | Scheduled date | `2025-12-20` |
+| `{{urgency}}` | Urgency score | `15.5` |
+
+Empty placeholders are replaced with an empty string and trailing whitespace is trimmed.
 
 ## Requirements
 

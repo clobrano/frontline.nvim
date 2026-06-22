@@ -965,6 +965,43 @@ function M.add_todo_annotation()
   end)
 end
 
+local function parse_iso_date_for_copy(iso_date)
+  if not iso_date then
+    return ""
+  end
+  local year = string.sub(iso_date, 1, 4)
+  local month = string.sub(iso_date, 5, 6)
+  local day = string.sub(iso_date, 7, 8)
+  local hour = string.sub(iso_date, 10, 11)
+  local minute = string.sub(iso_date, 12, 13)
+  local formatted = string.format("%s-%s-%s %s:%s", year, month, day, hour, minute)
+  if string.match(formatted, " 00:00$") then
+    return string.gsub(formatted, " 00:00$", "")
+  end
+  return formatted
+end
+
+local function render_copy_template(format_str, task)
+  local replacements = {
+    description = task.description or "",
+    uuid = task.uuid or "",
+    short_uuid = string.sub(task.uuid or "", 1, 8),
+    status = task.status or "",
+    project = task.project or "",
+    priority = task.priority or "",
+    tags = task.tags and table.concat(task.tags, " ") or "",
+    due = parse_iso_date_for_copy(task.due),
+    scheduled = parse_iso_date_for_copy(task.scheduled),
+    urgency = task.urgency and tostring(task.urgency) or "",
+  }
+
+  local result = format_str:gsub("{{%s*([%w_]+)%s*}}", function(key)
+    return replacements[key] or ""
+  end)
+
+  return vim.trim(result)
+end
+
 -- Copy task description and short UUID to clipboard
 function M.copy_task()
   local hash = M.get_task_hash_under_cursor()
@@ -994,11 +1031,8 @@ function M.copy_task()
   end
 
   local task = tasks[1]
-  local description = task.description or "Unknown task"
-  local short_uuid = string.sub(task.uuid, 1, 8)
-
-  -- Format as "description (short_uuid)"
-  local text_to_copy = string.format("%s `%s`", description, short_uuid)
+  local format_str = config.copy_task_format or "{{description}}"
+  local text_to_copy = render_copy_template(format_str, task)
 
   -- Copy to system clipboard (+ register)
   vim.fn.setreg('+', text_to_copy)
@@ -1856,5 +1890,7 @@ function M.open_url()
     select_and_open_resource(all_resources, annotations_map)
   end
 end
+
+M._render_copy_template = render_copy_template
 
 return M

@@ -21,6 +21,7 @@ local config = {
   enable_reverse_dependencies = true, -- Enable reverse dependency tracking (anchor icon and "tasks this task is blocking" view)
   require_todo_annotations_done = true, -- Prevents task completion if there are annotations starting with "TODO:" or "[ ]" (must be changed to "DONE:" or "[x]")
   notes_directory = nil, -- Fallback directory for markdown notes (nil = cwd). Overridden by per-workspace notes_directory.
+  copy_task_format = "{{description}}",
   mappings = {
     toggle_done = "<leader>td",
     toggle_started = "<leader>ts",
