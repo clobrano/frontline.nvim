@@ -13,6 +13,7 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 - 🕐 Local timezone display for dates and times
 - 🗂️ Multiple Taskwarrior workspaces support with `@workspace` syntax
 - 🎨 Smart autocomplete for projects, tags, dates, workspaces, and priorities
+- 🔃 Configurable task sorting: global default and per-view `sort:` / `sort.reverse:` directives
 
 ## Installation
 
@@ -52,6 +53,43 @@ Add Taskwarrior queries to your Markdown headers using the pipe `|` separator:
 # High Priority Work | project:work priority:H
 
 # Due This Week | due.before:eow
+```
+
+### Task Sorting
+
+Tasks within each view are sorted by urgency by default. You can change the default sort globally via config, or override it per-view using `sort:` and `sort.reverse:` directives in the header.
+
+**Per-view sort syntax:**
+
+```markdown
+# Due Soon | +PENDING due.before:eow sort:due
+
+# Recently Completed | +COMPLETED sort.reverse:completed
+
+# By Project | @work +PENDING sort:project
+```
+
+`sort:field` sorts ascending; `sort.reverse:field` sorts descending. Active tasks always appear before completed/deleted tasks regardless of the sort field.
+
+**Supported sort fields:**
+
+| Field | Description |
+|-------|-------------|
+| `urgency` | Taskwarrior urgency score (default) |
+| `priority` | Priority level (H > M > L) |
+| `due` | Due date (earliest first) |
+| `scheduled` | Scheduled date (earliest first) |
+| `completed` / `end` | Completion date |
+| `project` | Project name (alphabetical) |
+
+Tasks with no value for the chosen field sort last (e.g. tasks without a due date when sorting by `due`).
+
+**Global default sort:**
+
+```lua
+require('frontline').setup({
+  default_sort = { field = "due", reverse = false },  -- default: urgency ascending
+})
 ```
 
 ### Multiple Workspaces
@@ -258,6 +296,7 @@ require('frontline').setup({
 | `default_workspace` | string | `nil` | Default workspace name (nil uses system taskwarrior) |
 | `enable_reverse_dependencies` | boolean | true | Enable reverse dependency tracking (⚓ icon and "tasks this task is blocking" view) |
 | `reverse_dependencies_warn_threshold` | number | 1000 | Warn if reverse dependency queries take longer than this (in milliseconds). Set to 0 to disable warnings. |
+| `default_sort` | table | `{ field = "urgency", reverse = false }` | Default sort for all views. `field` can be `urgency`, `priority`, `due`, `scheduled`, `completed`, or `project`. Set `reverse = true` to flip the order. |
 | `copy_task_format` | string | `"{{description}}"` | Template for the `<leader>tc` copy-to-clipboard action. See [Copy Task Format](#copy-task-format) below. |
 | `mappings.toggle_done` | string | `"<leader>td"` | Keybinding to toggle task done/undone |
 | `mappings.toggle_started` | string | `"<leader>ts"` | Keybinding to toggle task started/unstarted |
@@ -353,9 +392,9 @@ This plugin aims for compatibility with [Taskwiki](https://github.com/tools-life
 nvim --headless -c "PlenaryBustedDirectory tests/"
 ```
 
-All tests should pass (30/30):
+All tests should pass (33/33):
 - Integration tests: 5
-- Parser tests: 3
+- Parser tests: 6
 - Task Client tests: 4
 - Renderer tests: 18
 
