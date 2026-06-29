@@ -37,6 +37,37 @@ describe("Parser Module", function()
     assert.are.same(0, #queries)
   end)
 
+  it("should extract sort directive from query", function()
+    local lines = {
+      "## Work | @work +PENDING due.before:eow sort:due",
+    }
+    local queries = parser.extract_queries(lines)
+    assert.are.same(1, #queries)
+    assert.are.same("+PENDING due.before:eow", queries[1].query)
+    assert.are.same("due", queries[1].sort.field)
+    assert.are.same(false, queries[1].sort.reverse)
+  end)
+
+  it("should extract sort.reverse directive from query", function()
+    local lines = {
+      "## Work | @work +PENDING due.before:eow sort.reverse:due",
+    }
+    local queries = parser.extract_queries(lines)
+    assert.are.same(1, #queries)
+    assert.are.same("+PENDING due.before:eow", queries[1].query)
+    assert.are.same("due", queries[1].sort.field)
+    assert.are.same(true, queries[1].sort.reverse)
+  end)
+
+  it("should have nil sort when no sort directive given", function()
+    local lines = {
+      "## Work | +PENDING",
+    }
+    local queries = parser.extract_queries(lines)
+    assert.are.same(1, #queries)
+    assert.is_nil(queries[1].sort)
+  end)
+
   it("should handle empty lines and lines without headers", function()
     local lines = {
       "",

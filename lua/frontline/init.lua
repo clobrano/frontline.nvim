@@ -22,6 +22,7 @@ local config = {
   require_todo_annotations_done = true, -- Prevents task completion if there are annotations starting with "TODO:" or "[ ]" (must be changed to "DONE:" or "[x]")
   notes_directory = nil, -- Fallback directory for markdown notes (nil = cwd). Overridden by per-workspace notes_directory.
   copy_task_format = "{{description}}",
+  default_sort = { field = "urgency", reverse = false }, -- Default sort for all views (field: urgency|priority|due|scheduled|project)
   mappings = {
     toggle_done = "<leader>td",
     toggle_started = "<leader>ts",
@@ -171,14 +172,50 @@ local function refresh_tasks()
       end
     end
 
-    -- Sort tasks: active tasks first (by urgency), then completed/deleted tasks (by urgency)
+    -- Determine sort config: per-view sort overrides config default
+    local sort_cfg = query_info.sort or config.default_sort or { field = "urgency", reverse = false }
+
+    -- Comparator for a single sort field
+    local function compare_by_field(a, b, field)
+      if field == "urgency" then
+        return (a.urgency or 0) > (b.urgency or 0)
+      elseif field == "priority" then
+        local prio = { H = 3, M = 2, L = 1 }
+        return (prio[a.priority] or 0) > (prio[b.priority] or 0)
+      elseif field == "project" then
+        return (a.project or "") < (b.project or "")
+      elseif field == "due" then
+        -- nil due dates sort last
+        if not a.due and not b.due then return false end
+        if not a.due then return false end
+        if not b.due then return true end
+        return a.due < b.due
+      elseif field == "scheduled" then
+        if not a.scheduled and not b.scheduled then return false end
+        if not a.scheduled then return false end
+        if not b.scheduled then return true end
+        return a.scheduled < b.scheduled
+      elseif field == "completed" or field == "end" then
+        local a_end = a["end"]
+        local b_end = b["end"]
+        if not a_end and not b_end then return false end
+        if not a_end then return false end
+        if not b_end then return true end
+        return a_end < b_end
+      end
+      return false
+    end
+
+    -- Sort tasks: active tasks first, then completed/deleted; within each group use sort_cfg
     table.sort(tasks, function(a, b)
       local a_done = a.status == "completed" or a.status == "deleted"
       local b_done = b.status == "completed" or b.status == "deleted"
       if a_done ~= b_done then
         return not a_done -- active tasks come first
       end
-      return (a.urgency or 0) > (b.urgency or 0)
+      local result = compare_by_field(a, b, sort_cfg.field)
+      if sort_cfg.reverse then result = not result end
+      return result
     end)
 
     local formatted_tasks = {}
