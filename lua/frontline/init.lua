@@ -213,9 +213,10 @@ local function refresh_tasks()
       if a_done ~= b_done then
         return not a_done -- active tasks come first
       end
-      local result = compare_by_field(a, b, sort_cfg.field)
-      if sort_cfg.reverse then result = not result end
-      return result
+      if sort_cfg.reverse then
+        return compare_by_field(b, a, sort_cfg.field)
+      end
+      return compare_by_field(a, b, sort_cfg.field)
     end)
 
     local formatted_tasks = {}
