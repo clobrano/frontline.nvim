@@ -1,5 +1,9 @@
 local M = {}
 
+-- Forward declaration: convert_utc_to_local falls back to the raw parser when
+-- the system 'date' command is unavailable or fails.
+local parse_iso_date_raw
+
 -- Helper to convert ISO 8601 date from Taskwarrior (YYYYMMDDTHHmmssZ) to local time
 -- Uses the system's 'date' command to handle timezone conversion and DST
 local function convert_utc_to_local(iso_date)
@@ -25,7 +29,7 @@ local function convert_utc_to_local(iso_date)
 end
 
 -- Helper to parse ISO 8601 date format without conversion (raw display)
-local function parse_iso_date_raw(iso_date)
+function parse_iso_date_raw(iso_date)
   if not iso_date then
     return nil
   end
@@ -59,10 +63,9 @@ local function parse_iso_date(iso_date, convert_to_local)
   return date_str
 end
 
--- Helper to compute a relative date string from an ISO 8601 UTC date
--- Returns strings like "today", "tomorrow", "yesterday", "2 days", "3 weeks",
--- "1 month", or "-2 days", "-3 weeks", "-1 month" for past dates
-local function format_relative_date(iso_date)
+-- Helper to compute the number of whole days between today and an ISO 8601 UTC
+-- date, both taken at local midnight. Negative for past dates, nil on failure.
+local function date_diff_days(iso_date)
   if not iso_date then return nil end
 
   -- Reformat from YYYYMMDDTHHmmssZ to YYYY-MM-DDTHH:MM:SSZ
@@ -90,7 +93,15 @@ local function format_relative_date(iso_date)
     hour = 0, min = 0, sec = 0,
   })
 
-  local diff_days = math.floor((task_ts - today_ts) / 86400)
+  return math.floor((task_ts - today_ts) / 86400)
+end
+
+-- Helper to compute a relative date string from an ISO 8601 UTC date
+-- Returns strings like "today", "tomorrow", "yesterday", "2 days", "3 weeks",
+-- "1 month", or "-2 days", "-3 weeks", "-1 month" for past dates
+local function format_relative_date(iso_date)
+  local diff_days = date_diff_days(iso_date)
+  if not diff_days then return nil end
 
   if diff_days == 0 then
     return "today"
@@ -263,6 +274,13 @@ function M.format_task(task, convert_to_local, use_relative)
 
   return table.concat(parts, " ")
 end
+
+-- Exposed for the task View, which formats the same dates and status markers
+-- in a multi-line layout.
+M.parse_iso_date = parse_iso_date
+M.format_relative_date = format_relative_date
+M.date_diff_days = date_diff_days
+M.get_status_indicator = get_status_indicator
 
 -- Placeholder for replacing content in the buffer
 function M.render_tasks_in_buffer(start_line, end_line, formatted_tasks)

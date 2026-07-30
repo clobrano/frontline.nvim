@@ -96,15 +96,27 @@ function M.get_blocking_uuids(workspace_rc)
 end
 
 -- Function to get reverse dependencies (tasks that depend on this task)
-function M.get_reverse_dependencies(task_uuid)
+function M.get_reverse_dependencies(task_uuid, workspace_rc)
   -- Query all tasks with dependencies
   -- Note: depends.any: uses substring matching, so we need to filter results
   local query = string.format("depends.any:%s", task_uuid)
-  local cmd = string.format("task '%s' export", query)
+  local cmd
+  if workspace_rc and workspace_rc ~= "" then
+    local escaped_rc = string.gsub(workspace_rc, "'", "'\\''")
+    cmd = string.format("task rc:'%s' '%s' export", escaped_rc, query)
+  else
+    cmd = string.format("task '%s' export", query)
+  end
+
   local stdout, exit_code = _run_shell_command(cmd)
 
   if exit_code ~= 0 then
     return nil, string.format("Failed to query reverse dependencies (exit code %d)", exit_code)
+  end
+
+  -- Strip TASKRC override messages (same as execute_query)
+  if workspace_rc then
+    stdout = string.gsub(stdout, "^TASKRC override:.-\n", "")
   end
 
   local ok, parsed_json = pcall(vim.fn.json_decode, stdout)
@@ -127,6 +139,24 @@ function M.get_reverse_dependencies(task_uuid)
   end
 
   return filtered_results
+end
+
+-- Run an arbitrary Taskwarrior command (e.g. "<hash> annotate 'text'") against
+-- an optional workspace rc file. Returns success, output.
+function M.run_command(task_args, workspace_rc)
+  local cmd
+  if workspace_rc and workspace_rc ~= "" then
+    local escaped_rc = string.gsub(workspace_rc, "'", "'\\''")
+    cmd = string.format("task rc:'%s' %s", escaped_rc, task_args)
+  else
+    cmd = string.format("task %s", task_args)
+  end
+
+  local stdout, exit_code = _run_shell_command(cmd)
+  if exit_code ~= 0 then
+    return false, stdout
+  end
+  return true, stdout
 end
 
 -- Expose for testing purposes

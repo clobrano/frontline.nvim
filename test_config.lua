@@ -10,6 +10,7 @@ require('frontline').setup({
   mappings = {
     toggle_done = "<leader>td",      -- Toggle task done/undone
     toggle_started = "<leader>ts",   -- Toggle task started/unstarted
+    view_task = "<leader>tv",        -- Open the task View
     modify_task = "<leader>tm",      -- Modify task properties
     add_annotation = "<leader>ta",   -- Add task annotation
     edit_task = "<leader>te",        -- Edit task in Taskwarrior editor
@@ -21,6 +22,6 @@ vim.api.nvim_create_autocmd("VimEnter", {
   callback = function()
     print("Frontline plugin loaded!")
     print("Create a markdown file with '# Tasks | status:pending' to test.")
-    print("Use <leader>td, <leader>ts, <leader>tm, <leader>ta, <leader>te on task lines.")
+    print("Use <leader>td, <leader>ts, <leader>tv, <leader>tm, <leader>ta, <leader>te on task lines.")
   end,
 })
