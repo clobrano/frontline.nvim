@@ -29,7 +29,8 @@ local config = {
   view = {
     min_width = 0.5,         -- narrowest the window gets
     max_width = 0.9,         -- widest the window gets
-    min_height = 5,          -- shortest the window gets, in rows
+    min_height = 0.7,        -- shortest the window gets, so short tasks do not
+                             -- look like they are hiding scrolled-off content
     max_height = 0.85,       -- tallest the window gets
     border = "rounded",      -- any value accepted by nvim_open_win's border
     show_urgency = true,     -- include urgency on the attribute line

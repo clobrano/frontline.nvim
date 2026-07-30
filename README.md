@@ -241,10 +241,42 @@ A task with nothing but a description renders as a single line.
 
 The window is sized to its content and grows with the terminal: the four size
 options are read as a fraction of the screen when they are `1` or less, and as
-absolute columns or rows otherwise. `min_width` keeps short tasks from opening
-as a sliver, `max_width` keeps long annotations from stretching across a wide
-monitor, and `max_height` decides when a task with many annotations starts to
-scroll instead of growing.
+absolute columns or rows otherwise. `min_height` defaults to 70% of the screen
+so the window keeps a steady size whether or not the content fills it — a short
+task in a snug window reads as if something has scrolled out of sight.
+`max_width` keeps long annotations from stretching across a wide monitor, and
+`max_height` decides when a task with many annotations starts to scroll instead
+of growing.
+
+#### Highlight groups
+
+Each element of the View has its own highlight group, so a colorscheme or your
+own config can restyle any one of them. All are defined as links with
+`default = true`, so an existing definition always wins:
+
+| Group | Links to | Applies to |
+|-------|----------|------------|
+| `FrontlineViewDescription` | `Title` | The task description on the title line |
+| `FrontlineViewHash` | `Comment` | Short hashes, on the title and dependency lines |
+| `FrontlineViewPriority` | `Statement` | The priority icon and letter |
+| `FrontlineViewProject` | `Directory` | The project name |
+| `FrontlineViewTags` | `Special` | The `+tag` list |
+| `FrontlineViewRecur` | `Special` | The recurrence period |
+| `FrontlineViewWaiting` | `Comment` | The `waiting` marker |
+| `FrontlineViewUrgency` | `Comment` | The urgency value |
+| `FrontlineViewSeparator` | `Comment` | The `·` between fields |
+| `FrontlineViewOverdue` | `WarningMsg` | A due date in the past |
+| `FrontlineViewSection` | `Title` | The Annotations / Blocked by / Blocking headers |
+| `FrontlineViewTodo` | `WarningMsg` | The `☐` marker of an open annotation |
+| `FrontlineViewDone` | `Comment` | A completed annotation |
+| `FrontlineViewAnnotationDate` | `Comment` | The date prefix on an annotation |
+| `FrontlineViewDepOpen` | `Normal` | An incomplete dependency |
+| `FrontlineViewDepDone` | `Comment` | A completed dependency |
+
+```lua
+vim.api.nvim_set_hl(0, "FrontlineViewProject", { fg = "#7aa2f7", bold = true })
+vim.api.nvim_set_hl(0, "FrontlineViewTags", { fg = "#9ece6a", italic = true })
+```
 
 Inside the View:
 
@@ -349,7 +381,7 @@ require('frontline').setup({
   view = {
     min_width = 0.5,          -- Narrowest the View gets
     max_width = 0.9,          -- Widest the View gets
-    min_height = 5,           -- Shortest the View gets, in rows
+    min_height = 0.7,         -- Shortest the View gets
     max_height = 0.85,        -- Tallest the View gets
     border = "rounded",       -- Any border accepted by nvim_open_win
     show_urgency = true,      -- Show urgency on the attribute line
@@ -406,7 +438,7 @@ require('frontline').setup({
 | `copy_task_format` | string | `"{{description}}"` | Template for the `<leader>tc` copy-to-clipboard action. See [Copy Task Format](#copy-task-format) below. |
 | `view.min_width` | number | 0.5 | Narrowest the task View gets |
 | `view.max_width` | number | 0.9 | Widest the task View gets |
-| `view.min_height` | number | 5 | Shortest the task View gets |
+| `view.min_height` | number | 0.7 | Shortest the task View gets |
 | `view.max_height` | number | 0.85 | Tallest the task View gets |
 | `view.border` | string | `"rounded"` | Border style for the task View window |
 | `view.show_urgency` | boolean | true | Show urgency on the View's attribute line |

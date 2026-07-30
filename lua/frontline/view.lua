@@ -19,7 +19,7 @@ local ABSOLUTE_MIN_WIDTH = 20
 local default_view_config = {
   min_width = 0.5,
   max_width = 0.9,
-  min_height = 5,
+  min_height = 0.7,
   max_height = 0.85,
   border = "rounded",
   show_urgency = true,
@@ -28,6 +28,34 @@ local default_view_config = {
 }
 
 M.default_config = default_view_config
+
+-- Highlight groups, one per role so a colorscheme or user config can restyle
+-- any single element. All are defined with default = true, so an existing
+-- definition always wins.
+local highlight_links = {
+  FrontlineViewDescription = "Title",
+  FrontlineViewHash = "Comment",
+  FrontlineViewSeparator = "Comment",
+  FrontlineViewPriority = "Statement",
+  FrontlineViewProject = "Directory",
+  FrontlineViewTags = "Special",
+  FrontlineViewRecur = "Special",
+  FrontlineViewWaiting = "Comment",
+  FrontlineViewUrgency = "Comment",
+  FrontlineViewOverdue = "WarningMsg",
+  FrontlineViewSection = "Title",
+  FrontlineViewTodo = "WarningMsg",
+  FrontlineViewDone = "Comment",
+  FrontlineViewAnnotationDate = "Comment",
+  FrontlineViewDepOpen = "Normal",
+  FrontlineViewDepDone = "Comment",
+}
+
+function M.setup_highlights()
+  for group, link in pairs(highlight_links) do
+    vim.api.nvim_set_hl(0, group, { link = link, default = true })
+  end
+end
 
 -- Resolve a size that may be expressed as a fraction of the available space
 local function resolve_dimension(value, total)
@@ -117,10 +145,12 @@ local function format_date_value(iso_date, icon, convert_to_local)
   return value
 end
 
--- A line spec is { left = string, right = string|nil, hl = {...}, meta = {...} }
--- Right-hand text (task hashes) is right-aligned once the final width is known.
-local function line_spec(left, right, hl, meta)
-  return { left = left, right = right, hl = hl, meta = meta }
+-- A line spec is { left, right, hl, meta, right_hl }. Right-hand text (task
+-- hashes) is right-aligned once the final width is known, so its highlight is
+-- resolved at composition time rather than here. Offsets in hl are relative to
+-- the start of the line, and `to = -1` means "to the end of the left text".
+local function line_spec(left, right, hl, meta, right_hl)
+  return { left = left, right = right, hl = hl, meta = meta, right_hl = right_hl }
 end
 
 -- Join { text = , hl = } segments into one line, tracking the byte offset of
@@ -132,6 +162,9 @@ local function join_segments(segments, separator)
 
   for i, segment in ipairs(segments) do
     if i > 1 then
+      -- Dim the separators so the fields themselves stand out
+      table.insert(highlights,
+        { group = "FrontlineViewSeparator", from = offset, to = offset + #separator })
       offset = offset + #separator
     end
     if segment.hl then
@@ -160,7 +193,7 @@ local function dep_specs(specs, title, deps)
     and string.format("%s (%d)", title, #deps)
     or string.format("%s (%d · %d open)", title, #deps, open_count)
 
-  table.insert(specs, line_spec(header, nil, { { group = "Title", from = 0, to = -1 } }))
+  table.insert(specs, line_spec(header, nil, { { group = "FrontlineViewSection", from = 0, to = -1 } }))
 
   for _, dep in ipairs(deps) do
     local is_open = dep.status ~= "completed" and dep.status ~= "deleted"
@@ -169,8 +202,9 @@ local function dep_specs(specs, title, deps)
     table.insert(specs, line_spec(
       left,
       string.format("`%s`", dep.short_hash),
-      { { group = is_open and "Normal" or "Comment", from = 0, to = -1 } },
-      { kind = "dependency", uuid = dep.uuid }
+      { { group = is_open and "FrontlineViewDepOpen" or "FrontlineViewDepDone", from = 0, to = -1 } },
+      { kind = "dependency", uuid = dep.uuid },
+      "FrontlineViewHash"
     ))
   end
 end
@@ -205,32 +239,40 @@ function M.render(data, opts)
   table.insert(specs, line_spec(
     string.format("%s %s", renderer.get_status_indicator(task), description),
     string.format("`%s`", string.sub(task.uuid or "", 1, 8)),
-    { { group = "Title", from = 0, to = -1 } }
+    { { group = "FrontlineViewDescription", from = 0, to = -1 } },
+    nil,
+    "FrontlineViewHash"
   ))
 
   -- Attributes, all on one line and each present only when set
   local attrs = {}
   if task.priority and priority_icons[task.priority] then
-    table.insert(attrs, { text = string.format("%s %s", priority_icons[task.priority], task.priority) })
+    table.insert(attrs, {
+      text = string.format("%s %s", priority_icons[task.priority], task.priority),
+      hl = "FrontlineViewPriority",
+    })
   end
   if task.status == "waiting" then
-    table.insert(attrs, { text = "waiting", hl = "Comment" })
+    table.insert(attrs, { text = "waiting", hl = "FrontlineViewWaiting" })
   end
   if task.project and task.project ~= "" then
-    table.insert(attrs, { text = task.project })
+    table.insert(attrs, { text = task.project, hl = "FrontlineViewProject" })
   end
   if task.tags and #task.tags > 0 then
     local tags = {}
     for _, tag in ipairs(task.tags) do
       table.insert(tags, "+" .. tag)
     end
-    table.insert(attrs, { text = table.concat(tags, " ") })
+    table.insert(attrs, { text = table.concat(tags, " "), hl = "FrontlineViewTags" })
   end
   if task.recur then
-    table.insert(attrs, { text = string.format("🔁 %s", task.recur) })
+    table.insert(attrs, { text = string.format("🔁 %s", task.recur), hl = "FrontlineViewRecur" })
   end
   if opts.show_urgency and task.urgency then
-    table.insert(attrs, { text = string.format("urgency %.1f", task.urgency), hl = "Comment" })
+    table.insert(attrs, {
+      text = string.format("urgency %.1f", task.urgency),
+      hl = "FrontlineViewUrgency",
+    })
   end
 
   if #attrs > 0 then
@@ -251,7 +293,7 @@ function M.render(data, opts)
     local overdue = diff ~= nil and diff < 0 and task.status ~= "completed"
     table.insert(dates, {
       text = format_date_value(task.due, ICON_DUE, convert_to_local),
-      hl = overdue and "WarningMsg" or nil,
+      hl = overdue and "FrontlineViewOverdue" or nil,
     })
   end
   if task["until"] then
@@ -270,7 +312,7 @@ function M.render(data, opts)
     table.insert(specs, line_spec(
       string.format("Annotations (%d)", #annotations),
       nil,
-      { { group = "Title", from = 0, to = -1 } }
+      { { group = "FrontlineViewSection", from = 0, to = -1 } }
     ))
 
     for i, annotation in ipairs(annotations) do
@@ -289,12 +331,12 @@ function M.render(data, opts)
       local hl = {}
       if date_prefix ~= "" then
         local from = #string.format("  %s ", marker)
-        table.insert(hl, { group = "Comment", from = from, to = from + #date_prefix })
+        table.insert(hl, { group = "FrontlineViewAnnotationDate", from = from, to = from + #date_prefix })
       end
       if state == "todo" then
-        table.insert(hl, { group = "WarningMsg", from = 2, to = 2 + #marker })
+        table.insert(hl, { group = "FrontlineViewTodo", from = 2, to = 2 + #marker })
       elseif state == "done" then
-        table.insert(hl, { group = "Comment", from = 2, to = 2 + #marker })
+        table.insert(hl, { group = "FrontlineViewDone", from = 2, to = -1 })
       end
 
       table.insert(specs, line_spec(left, nil, hl, {
@@ -354,8 +396,16 @@ function M.render(data, opts)
       table.insert(highlights, {
         line = lnum - 1,
         col_start = hl.from,
-        col_end = hl.to == -1 and #line or math.min(hl.to, #line),
+        col_end = hl.to == -1 and #spec.left or math.min(hl.to, #spec.left),
         group = hl.group,
+      })
+    end
+    if spec.right and spec.right_hl then
+      table.insert(highlights, {
+        line = lnum - 1,
+        col_start = #line - #spec.right,
+        col_end = #line,
+        group = spec.right_hl,
       })
     end
     if spec.meta then
@@ -704,6 +754,8 @@ function M.open_hash(hash, workspace_rc)
   local frontline = require("frontline")
   local cfg = frontline.get_config() or {}
   local view_cfg = vim.tbl_extend("force", default_view_config, cfg.view or {})
+
+  M.setup_highlights()
 
   local bufnr = vim.api.nvim_create_buf(false, true)
   local st = {

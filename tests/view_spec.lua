@@ -283,6 +283,86 @@ describe("view.render", function()
     assert.is_truthy(lines[1]:match("`a2f1c3d8`$"))
   end)
 
+  it("gives project, tags, priority and urgency their own highlight groups", function()
+    local lines, highlights = view.render({ task = base_task({
+      project = "frontline.nvim",
+      tags = { "nvim", "ux" },
+      priority = "H",
+      urgency = 12.4,
+    }) }, { convert_dates_to_local = false, min_width = 10 })
+
+    -- map group -> the text it covers on the attribute line
+    local covered = {}
+    for _, hl in ipairs(highlights) do
+      if hl.line == 1 then
+        covered[hl.group] = lines[2]:sub(hl.col_start + 1, hl.col_end)
+      end
+    end
+
+    assert.are.equal("frontline.nvim", covered.FrontlineViewProject)
+    assert.are.equal("+nvim +ux", covered.FrontlineViewTags)
+    assert.are.equal("🔴 H", covered.FrontlineViewPriority)
+    assert.are.equal("urgency 12.4", covered.FrontlineViewUrgency)
+    assert.are.equal(" · ", covered.FrontlineViewSeparator)
+  end)
+
+  it("highlights the hash separately from the description", function()
+    local lines, highlights = view.render({ task = base_task() },
+      { convert_dates_to_local = false, min_width = 70 })
+
+    local covered = {}
+    for _, hl in ipairs(highlights) do
+      if hl.line == 0 then
+        covered[hl.group] = lines[1]:sub(hl.col_start + 1, hl.col_end)
+      end
+    end
+
+    assert.are.equal("`a2f1c3d8`", covered.FrontlineViewHash)
+    -- the description highlight must not bleed across the alignment padding
+    assert.are.equal("[ ] Refactor the annotation shortcuts", covered.FrontlineViewDescription)
+  end)
+
+  it("marks an overdue due date and leaves a future one alone", function()
+    local function due_groups(due)
+      local _, highlights = view.render({ task = base_task({ due = due }) },
+        { convert_dates_to_local = false, min_width = 10 })
+      local groups = {}
+      for _, hl in ipairs(highlights) do
+        groups[hl.group] = true
+      end
+      return groups
+    end
+
+    local past = os.date("!%Y%m%dT000000Z", os.time() - 10 * 86400)
+    local future = os.date("!%Y%m%dT000000Z", os.time() + 10 * 86400)
+
+    assert.is_true(due_groups(past).FrontlineViewOverdue == true)
+    assert.is_nil(due_groups(future).FrontlineViewOverdue)
+  end)
+
+  it("defines every highlight group it emits", function()
+    view.setup_highlights()
+    local _, highlights = view.render({
+      task = base_task({
+        project = "p", tags = { "t" }, priority = "H", urgency = 1.0,
+        recur = "weekly", due = "20260802T000000Z",
+        annotations = {
+          { entry = "20260729T101500Z", description = "TODO: a" },
+          { entry = "20260729T101500Z", description = "DONE: b" },
+        },
+      }),
+      forward_deps = {
+        { uuid = "9b7e0c11", short_hash = "9b7e0c11", description = "open", status = "pending" },
+        { uuid = "41d0a6f2", short_hash = "41d0a6f2", description = "done", status = "completed" },
+      },
+    }, { convert_dates_to_local = false })
+
+    for _, hl in ipairs(highlights) do
+      local def = vim.api.nvim_get_hl(0, { name = hl.group })
+      assert.is_truthy(next(def), "undefined highlight group: " .. hl.group)
+    end
+  end)
+
   it("treats sizes of 1 or less as a fraction of the available space", function()
     assert.are.equal(50, view.resolve_dimension(0.5, 100))
     assert.are.equal(90, view.resolve_dimension(0.9, 100))
