@@ -10,7 +10,6 @@ local ICON_SCHEDULED = "⏱️"
 local ICON_DUE = "⏰"
 local ICON_END = "✅"
 
-local LABEL_WIDTH = 10
 local MIN_WIDTH = 40
 
 -- Default view options, merged with config.view by the caller
@@ -86,20 +85,6 @@ local function display_width(str)
   return #str
 end
 
--- Human readable status word for the meta block
-local function status_word(task)
-  if task.status == "completed" then
-    return "completed"
-  elseif task.status == "deleted" then
-    return "deleted"
-  elseif task.status == "waiting" then
-    return "waiting"
-  elseif task.start then
-    return "started"
-  end
-  return task.status or "pending"
-end
-
 local priority_icons = { H = "🔴", M = "🟠", L = "🟡" }
 
 -- Format a date as "<icon> <absolute> (<relative>)", omitting the relative part
@@ -120,14 +105,25 @@ local function line_spec(left, right, hl, meta)
   return { left = left, right = right, hl = hl, meta = meta }
 end
 
-local function meta_row(specs, label, value, value_hl)
-  local padded = label .. string.rep(" ", math.max(1, LABEL_WIDTH - #label))
-  local left = string.format("  %s%s", padded, value)
-  local hl = { { group = "Comment", from = 2, to = 2 + #label } }
-  if value_hl then
-    table.insert(hl, { group = value_hl, from = 2 + #padded, to = -1 })
+-- Join { text = , hl = } segments into one line, tracking the byte offset of
+-- each segment so its highlight lands on the right columns.
+local function join_segments(segments, separator)
+  local parts = {}
+  local highlights = {}
+  local offset = 0
+
+  for i, segment in ipairs(segments) do
+    if i > 1 then
+      offset = offset + #separator
+    end
+    if segment.hl then
+      table.insert(highlights, { group = segment.hl, from = offset, to = offset + #segment.text })
+    end
+    offset = offset + #segment.text
+    table.insert(parts, segment.text)
   end
-  table.insert(specs, line_spec(left, nil, hl))
+
+  return table.concat(parts, separator), highlights
 end
 
 local function dep_specs(specs, title, deps)
@@ -143,16 +139,15 @@ local function dep_specs(specs, title, deps)
   end
 
   local header = #deps == open_count
-    and string.format("  %s (%d)", title, #deps)
-    or string.format("  %s (%d · %d open)", title, #deps, open_count)
+    and string.format("%s (%d)", title, #deps)
+    or string.format("%s (%d · %d open)", title, #deps, open_count)
 
-  table.insert(specs, line_spec(""))
   table.insert(specs, line_spec(header, nil, { { group = "Title", from = 0, to = -1 } }))
 
   for _, dep in ipairs(deps) do
     local is_open = dep.status ~= "completed" and dep.status ~= "deleted"
     local marker = is_open and "☐" or "☑"
-    local left = string.format("    %s %s", marker, dep.description or "")
+    local left = string.format("  %s %s", marker, dep.description or "")
     table.insert(specs, line_spec(
       left,
       string.format("`%s`", dep.short_hash),
@@ -187,56 +182,67 @@ function M.render(data, opts)
     description = string.format("%s {%s%s}", description, ICON_END, end_date)
   end
 
+  -- The status marker on the title line already says pending/started/completed,
+  -- so the attribute line does not repeat it.
   table.insert(specs, line_spec(
     string.format("%s %s", renderer.get_status_indicator(task), description),
     string.format("`%s`", string.sub(task.uuid or "", 1, 8)),
     { { group = "Title", from = 0, to = -1 } }
   ))
-  table.insert(specs, line_spec(""))
 
-  -- Meta block: one row per field, and only when the field is set
-  local status_parts = { status_word(task) }
+  -- Attributes, all on one line and each present only when set
+  local attrs = {}
   if task.priority and priority_icons[task.priority] then
-    table.insert(status_parts, string.format("%s %s", priority_icons[task.priority], task.priority))
+    table.insert(attrs, { text = string.format("%s %s", priority_icons[task.priority], task.priority) })
   end
-  if opts.show_urgency and task.urgency then
-    table.insert(status_parts, string.format("urgency %.1f", task.urgency))
+  if task.status == "waiting" then
+    table.insert(attrs, { text = "waiting", hl = "Comment" })
   end
-  meta_row(specs, "status", table.concat(status_parts, " · "))
-
   if task.project and task.project ~= "" then
-    meta_row(specs, "project", task.project)
+    table.insert(attrs, { text = task.project })
   end
-
   if task.tags and #task.tags > 0 then
     local tags = {}
     for _, tag in ipairs(task.tags) do
       table.insert(tags, "+" .. tag)
     end
-    meta_row(specs, "tags", table.concat(tags, " "))
+    table.insert(attrs, { text = table.concat(tags, " ") })
+  end
+  if task.recur then
+    table.insert(attrs, { text = string.format("🔁 %s", task.recur) })
+  end
+  if opts.show_urgency and task.urgency then
+    table.insert(attrs, { text = string.format("urgency %.1f", task.urgency), hl = "Comment" })
   end
 
+  if #attrs > 0 then
+    local line, hl = join_segments(attrs, " · ")
+    table.insert(specs, line_spec(line, nil, hl))
+  end
+
+  -- Dates, all on one line and each present only when set
+  local dates = {}
   if task.wait then
-    meta_row(specs, "wait", format_date_value(task.wait, "", convert_to_local))
+    table.insert(dates, { text = "wait " .. format_date_value(task.wait, "", convert_to_local) })
   end
-
   if task.scheduled then
-    meta_row(specs, "scheduled", format_date_value(task.scheduled, ICON_SCHEDULED, convert_to_local))
+    table.insert(dates, { text = format_date_value(task.scheduled, ICON_SCHEDULED, convert_to_local) })
   end
-
   if task.due then
     local diff = renderer.date_diff_days(task.due)
     local overdue = diff ~= nil and diff < 0 and task.status ~= "completed"
-    meta_row(specs, "due", format_date_value(task.due, ICON_DUE, convert_to_local),
-      overdue and "WarningMsg" or nil)
+    table.insert(dates, {
+      text = format_date_value(task.due, ICON_DUE, convert_to_local),
+      hl = overdue and "WarningMsg" or nil,
+    })
   end
-
   if task["until"] then
-    meta_row(specs, "until", format_date_value(task["until"], "", convert_to_local))
+    table.insert(dates, { text = "until " .. format_date_value(task["until"], "", convert_to_local) })
   end
 
-  if task.recur then
-    meta_row(specs, "recur", string.format("🔁 %s", task.recur))
+  if #dates > 0 then
+    local line, hl = join_segments(dates, " · ")
+    table.insert(specs, line_spec(line, nil, hl))
   end
 
   -- Annotations
@@ -244,7 +250,7 @@ function M.render(data, opts)
   if #annotations > 0 then
     table.insert(specs, line_spec(""))
     table.insert(specs, line_spec(
-      string.format("  Annotations (%d)", #annotations),
+      string.format("Annotations (%d)", #annotations),
       nil,
       { { group = "Title", from = 0, to = -1 } }
     ))
@@ -261,16 +267,16 @@ function M.render(data, opts)
         date_prefix = date_str .. "  "
       end
 
-      local left = string.format("    %s %s%s", marker, date_prefix, text)
+      local left = string.format("  %s %s%s", marker, date_prefix, text)
       local hl = {}
       if date_prefix ~= "" then
-        local from = #string.format("    %s ", marker)
+        local from = #string.format("  %s ", marker)
         table.insert(hl, { group = "Comment", from = from, to = from + #date_prefix })
       end
       if state == "todo" then
-        table.insert(hl, { group = "WarningMsg", from = 4, to = 4 + #marker })
+        table.insert(hl, { group = "WarningMsg", from = 2, to = 2 + #marker })
       elseif state == "done" then
-        table.insert(hl, { group = "Comment", from = 4, to = 4 + #marker })
+        table.insert(hl, { group = "Comment", from = 2, to = 2 + #marker })
       end
 
       table.insert(specs, line_spec(left, nil, hl, {
@@ -282,10 +288,13 @@ function M.render(data, opts)
     end
   end
 
-  -- Dependencies
-  if opts.show_dependencies then
-    dep_specs(specs, "Blocked by", data.forward_deps or {})
-    dep_specs(specs, "Blocking", data.reverse_deps or {})
+  -- Dependencies: the two sections sit together as one block
+  local forward_deps = data.forward_deps or {}
+  local reverse_deps = data.reverse_deps or {}
+  if opts.show_dependencies and (#forward_deps > 0 or #reverse_deps > 0) then
+    table.insert(specs, line_spec(""))
+    dep_specs(specs, "Blocked by", forward_deps)
+    dep_specs(specs, "Blocking", reverse_deps)
   end
 
   -- Compose: right-align the trailing hashes against the widest line

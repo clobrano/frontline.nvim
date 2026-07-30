@@ -203,32 +203,41 @@ Place your cursor on any task line and use these default keybindings:
 ### Task View
 
 `<leader>tv` opens a floating window with everything worth knowing about the task
-under the cursor. Rows appear only when the corresponding field is set, so a bare
-task stays three lines tall:
+under the cursor:
 
 ```
-╭─ Task ───────────────────────────────────────────────────────╮
-│ [S] Refactor the annotation shortcuts             `a2f1c3d8` │
-│                                                              │
-│   status    started · 🔴 H · urgency 12.4                    │
-│   project   frontline.nvim                                   │
-│   tags      +nvim +ux                                        │
-│   scheduled ⏱️ 2026-07-31 (tomorrow)                         │
-│   due       ⏰ 2026-08-02 (+3 days)                          │
-│                                                              │
-│   Annotations (3)                                            │
-│     ☐ 2026-07-29  TODO: decide the floating window size      │
-│     ☑ 2026-07-29  DONE: survey existing mappings             │
-│     • 2026-07-28  NOTE: "~/notes/frontline-view.md"          │
-│                                                              │
-│   Blocked by (2 · 1 open)                                    │
-│     ☐ Design the View layout                    `9b7e0c11`   │
-│     ☑ Read the mappings module                  `41d0a6f2`   │
-│                                                              │
-│   Blocking (1)                                               │
-│     ☐ Release v0.5.0                            `77aa31b9`   │
-╰──────────────────────────────────────────────────────────────╯
+╭─ Task ──────────────────────────────────────────────────────╮
+│[S] Refactor the annotation shortcuts             `a2f1c3d8` │
+│🔴 H · frontline.nvim · +nvim +ux · urgency 12.4             │
+│⏱️ 2026-07-31 (tomorrow) · ⏰ 2026-08-02 (+3 days)            │
+│                                                             │
+│Annotations (3)                                              │
+│  ☐ 2026-07-29  TODO: decide the floating window size        │
+│  ☑ 2026-07-29  DONE: survey existing mappings               │
+│  • 2026-07-28  NOTE: "~/notes/frontline-view.md"            │
+│                                                             │
+│Blocked by (2 · 1 open)                                      │
+│  ☐ Design the View layout                      `9b7e0c11`   │
+│  ☑ Read the mappings module                    `41d0a6f2`   │
+│Blocking (1)                                                 │
+│  ☐ Release v0.5.0                              `77aa31b9`   │
+╰─────────────────────────────────────────────────────────────╯
 ```
+
+The layout is dense on purpose: the status marker on the title line already says
+pending/started/completed, every date shares one line, and project, tags,
+priority and urgency share another. Each element appears only when it is set, so
+most tasks are far shorter than the one above:
+
+```
+╭─ Task ───────────────────────────────────────╮
+│[ ] Buy milk                       `3fa9c201` │
+│home · urgency 1.2                            │
+│⏰ 2026-07-31 (tomorrow)                       │
+╰──────────────────────────────────────────────╯
+```
+
+A task with nothing but a description renders as a single line.
 
 Inside the View:
 

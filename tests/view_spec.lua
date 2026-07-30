@@ -88,7 +88,12 @@ describe("view.render", function()
   it("uses the started marker for a started task", function()
     local lines = render({ task = base_task({ start = "20260730T091200Z" }) })
     assert.is_truthy(lines[1]:match("^%[S%]"))
-    assert.is_truthy(has_line(lines, "started"))
+  end)
+
+  it("does not repeat the status as a word, the marker already says it", function()
+    local lines = render({ task = base_task({ start = "20260730T091200Z" }) })
+    assert.is_nil(find_line(lines, "started"))
+    assert.is_nil(find_line(lines, "pending"))
   end)
 
   it("appends the end date for a completed task", function()
@@ -100,39 +105,56 @@ describe("view.render", function()
     assert.is_truthy(lines[1]:find("2026-07-28", 1, true))
   end)
 
-  it("stays compact for a task with no optional fields", function()
+  it("renders a bare task as a single line", function()
     local lines = render({ task = base_task() })
-    -- title, blank, status row only
-    assert.are.equal(3, #lines)
-    assert.is_truthy(has_line(lines, "status"))
+    assert.are.equal(1, #lines)
   end)
 
-  it("omits date rows that are not set", function()
-    local lines = render({ task = base_task() })
-    assert.is_nil(find_line(lines, "due"))
-    assert.is_nil(find_line(lines, "scheduled"))
+  it("emits no date line when no dates are set", function()
+    local lines = render({ task = base_task({ project = "home" }) })
+    assert.is_nil(find_line(lines, "⏰"))
+    assert.is_nil(find_line(lines, "⏱️"))
     assert.is_nil(find_line(lines, "wait"))
     assert.is_nil(find_line(lines, "until"))
   end)
 
-  it("renders due and scheduled rows when set", function()
+  it("puts every date on one line", function()
     local lines = render({ task = base_task({
       due = "20260802T000000Z",
       scheduled = "20260731T000000Z",
+      wait = "20260729T000000Z",
+      ["until"] = "20260901T000000Z",
     }) })
-    assert.is_truthy(find_line(lines, "due"):find("2026-08-02", 1, true))
-    assert.is_truthy(find_line(lines, "scheduled"):find("2026-07-31", 1, true))
+
+    local date_line = find_line(lines, "⏰")
+    assert.is_truthy(date_line:find("2026-08-02", 1, true))
+    assert.is_truthy(date_line:find("2026-07-31", 1, true))
+    assert.is_truthy(date_line:find("2026-07-29", 1, true))
+    assert.is_truthy(date_line:find("2026-09-01", 1, true))
+    -- title + dates, nothing else
+    assert.are.equal(2, #lines)
   end)
 
-  it("renders project, tags and priority", function()
+  it("puts project, tags, priority and urgency on one line", function()
     local lines = render({ task = base_task({
       project = "frontline.nvim",
       tags = { "nvim", "ux" },
       priority = "H",
+      urgency = 12.4,
     }) })
-    assert.is_truthy(find_line(lines, "project"):find("frontline.nvim", 1, true))
-    assert.is_truthy(find_line(lines, "tags"):find("+nvim +ux", 1, true))
-    assert.is_truthy(find_line(lines, "status"):find("H", 1, true))
+
+    local attr_line = lines[2]
+    assert.is_truthy(attr_line:find("frontline.nvim", 1, true))
+    assert.is_truthy(attr_line:find("+nvim +ux", 1, true))
+    assert.is_truthy(attr_line:find("🔴 H", 1, true))
+    assert.is_truthy(attr_line:find("urgency 12.4", 1, true))
+    assert.are.equal(2, #lines)
+  end)
+
+  it("emits no attribute line when none of those fields are set", function()
+    local lines = render({ task = base_task({ due = "20260802T000000Z" }) })
+    assert.are.equal(2, #lines)
+    assert.is_truthy(lines[2]:find("⏰", 1, true))
   end)
 
   it("includes urgency by default and hides it when disabled", function()
@@ -194,6 +216,23 @@ describe("view.render", function()
     assert.is_truthy(find_line(lines, "Design the View layout"):find("☐", 1, true))
     assert.is_truthy(find_line(lines, "Read the mappings module"):find("☑", 1, true))
     assert.is_truthy(find_line(lines, "Release v0.5.0"):find("`77aa31b9`", 1, true))
+  end)
+
+  it("keeps the two dependency sections together as one block", function()
+    local lines = render({
+      task = base_task(),
+      forward_deps = {
+        { uuid = "9b7e0c11", short_hash = "9b7e0c11", description = "A blocker", status = "pending" },
+      },
+      reverse_deps = {
+        { uuid = "77aa31b9", short_hash = "77aa31b9", description = "A blocked task", status = "pending" },
+      },
+    })
+
+    -- title, blank, Blocked by, dep, Blocking, dep
+    assert.are.equal(6, #lines)
+    assert.are.equal("", lines[2])
+    assert.is_truthy(lines[5]:find("Blocking", 1, true))
   end)
 
   it("hides dependency sections when disabled", function()
