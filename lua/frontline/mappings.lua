@@ -206,11 +206,23 @@ local function get_todo_annotations(task)
   return nil
 end
 
--- Toggle task between done and undone
-function M.toggle_done()
-  local hash = M.get_task_hash_under_cursor()
+-- Toggle task between done and undone.
+-- Both arguments are optional and used by the task View, which acts on the task
+-- it is showing rather than the one under the cursor, and refreshes itself
+-- instead of the markdown buffer. on_complete may run asynchronously, after the
+-- user answers a prompt.
+function M.toggle_done(hash, on_complete)
+  hash = hash or M.get_task_hash_under_cursor()
   if not hash then
     return
+  end
+
+  local function finish()
+    if on_complete then
+      on_complete()
+    else
+      require("frontline").refresh_current_buffer(hash)
+    end
   end
 
   -- Get current workspace for proper task operations
@@ -241,7 +253,7 @@ function M.toggle_done()
     vim.notify("Reopening task...", vim.log.levels.INFO)
 
     if execute_task_command(string.format("%s modify status:pending", hash), workspace) then
-      require("frontline").refresh_current_buffer(hash)
+      finish()
     end
   else
     -- Check for TODO annotations if feature is enabled
@@ -345,13 +357,13 @@ function M.toggle_done()
               vim.notify("All tasks marked as done", vim.log.levels.INFO)
             end
 
-            require("frontline").refresh_current_buffer(hash)
+            finish()
           elseif idx == 3 then
             -- Mark task done, ignore dependencies
             vim.notify("Marking task as done (ignoring dependencies)...", vim.log.levels.INFO)
 
             if execute_task_command(string.format("%s done", hash), workspace) then
-              require("frontline").refresh_current_buffer(hash)
+              finish()
             end
           end
         end
@@ -361,7 +373,7 @@ function M.toggle_done()
       vim.notify("Marking task as done...", vim.log.levels.INFO)
 
       if execute_task_command(string.format("%s done", hash), workspace) then
-        require("frontline").refresh_current_buffer(hash)
+        finish()
       end
     end
   end
@@ -736,9 +748,10 @@ function M.add_task_as_dependency()
   end
 end
 
--- Toggle task between started and unstarted
-function M.toggle_started()
-  local hash = M.get_task_hash_under_cursor()
+-- Toggle task between started and unstarted.
+-- Takes the same optional hash and on_complete as toggle_done.
+function M.toggle_started(hash, on_complete)
+  hash = hash or M.get_task_hash_under_cursor()
   if not hash then
     return
   end
@@ -778,7 +791,11 @@ function M.toggle_started()
   end
 
   if execute_task_command(task_args, workspace) then
-    require("frontline").refresh_current_buffer(hash)
+    if on_complete then
+      on_complete()
+    else
+      require("frontline").refresh_current_buffer(hash)
+    end
   end
 end
 
@@ -1520,8 +1537,10 @@ local function should_open_in_neovim(path)
   return false
 end
 
--- Helper function to open a resource (URL or file path) with platform-specific command
-local function open_resource(resource)
+-- Helper function to open a resource (URL or file path) with platform-specific command.
+-- target_win is where text files are opened; callers whose current window cannot
+-- hold a file, such as the task View's floating window, pass their origin window.
+local function open_resource(resource, target_win)
   -- Expand ~ to home directory for file paths
   if resource:match("^~") then
     resource = resource:gsub("^~", os.getenv("HOME") or "~")
@@ -1532,7 +1551,14 @@ local function open_resource(resource)
     -- Check if file exists before trying to open
     local stat = vim.loop.fs_stat(resource)
     if stat then
-      vim.cmd("edit " .. vim.fn.fnameescape(resource))
+      local function edit()
+        vim.cmd("edit " .. vim.fn.fnameescape(resource))
+      end
+      if target_win and vim.api.nvim_win_is_valid(target_win) then
+        vim.api.nvim_win_call(target_win, edit)
+      else
+        edit()
+      end
       vim.notify(string.format("Opened in Neovim: %s", resource), vim.log.levels.INFO)
     else
       vim.notify(string.format("File not found: %s", resource), vim.log.levels.WARN)
@@ -1573,7 +1599,7 @@ local function is_fzf_vim_available()
 end
 
 -- Select and open a resource (URL or file path) using the best available picker
-local function select_and_open_resource(resources, annotations_map)
+local function select_and_open_resource(resources, annotations_map, target_win)
   -- Build display items with full annotation context
   local display_items = {}
   for i, resource in ipairs(resources) do
@@ -1611,7 +1637,7 @@ local function select_and_open_resource(resources, annotations_map)
           local selection = action_state.get_selected_entry()
           actions.close(prompt_bufnr)
           if selection then
-            open_resource(selection.value)
+            open_resource(selection.value, target_win)
           end
         end)
         return true
@@ -1639,7 +1665,7 @@ local function select_and_open_resource(resources, annotations_map)
         -- Extract index from selection (format: "N. annotation text")
         local idx = tonumber(string.match(selected, "^(%d+)%."))
         if idx and _G._frontline_resource_list[idx] then
-          open_resource(_G._frontline_resource_list[idx])
+          open_resource(_G._frontline_resource_list[idx], target_win)
         end
         _G._frontline_resource_list = nil
       end
@@ -1660,7 +1686,7 @@ local function select_and_open_resource(resources, annotations_map)
     end
   }, function(choice, idx)
     if choice and resources[idx] then
-      open_resource(resources[idx])
+      open_resource(resources[idx], target_win)
     end
   end)
 end
@@ -1836,16 +1862,17 @@ end
 
 -- Open the URL or file path contained in a single piece of text, prompting when
 -- there is more than one. Returns false when the text contains none.
--- Used by the task View to act on the annotation under the cursor.
-function M.open_resources_in_text(text)
+-- Used by the task View to act on the annotation under the cursor, which passes
+-- its origin window so files do not get loaded into the floating window.
+function M.open_resources_in_text(text, target_win)
   local resources, source_map = collect_resources({ text or "" })
 
   if #resources == 0 then
     return false
   elseif #resources == 1 then
-    open_resource(resources[1])
+    open_resource(resources[1], target_win)
   else
-    select_and_open_resource(resources, source_map)
+    select_and_open_resource(resources, source_map, target_win)
   end
 
   return true

@@ -283,13 +283,19 @@ Inside the View:
 | Key | Action |
 |-----|--------|
 | `q`, `<Esc>` | Close the View |
-| `a` | Add an annotation and refresh in place |
+| `a` | Add an annotation |
 | `x` | Toggle the annotation under the cursor between `TODO:`/`DONE:` (or `[ ]`/`[x]`) |
+| `d` | Toggle done |
+| `s` | Toggle started |
 | `<CR>` | On an annotation: open its URL or file path. On a dependency: open that task's View |
 | `<BS>` | Go back to the previous task after drilling into a dependency |
-| `d` | Toggle done (closes the View) |
-| `s` | Toggle started (closes the View) |
 | `?` | Show these keys |
+
+Only `q` and `<Esc>` close the window. Every other key re-renders the View in
+place, so actions can be repeated without reopening it — add three annotations
+in a row, tick off several TODOs, or start and stop a task while watching its
+urgency change. Files opened with `<CR>` load into the window the View was
+opened from and are waiting behind it once you close the View.
 
 `x` is the quickest way to clear the outstanding TODOs that block task completion
 when `require_todo_annotations_done` is enabled. Taskwarrior has no "edit

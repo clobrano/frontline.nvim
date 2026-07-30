@@ -479,14 +479,16 @@ end
 -- history so <BS> can walk back out of dependencies.
 local state = {}
 
+-- Every action except q/<Esc> leaves the View open and re-renders it, so they
+-- can be repeated without reopening the window.
 local KEYMAP_HELP = {
   { "q, <Esc>", "close the view" },
   { "a", "add an annotation" },
   { "x", "toggle TODO/DONE on the annotation under the cursor" },
+  { "d", "toggle done" },
+  { "s", "toggle started" },
   { "<CR>", "open the annotation's URL or file, or drill into a dependency" },
   { "<BS>", "go back to the previous task" },
-  { "d", "toggle done (closes the view)" },
-  { "s", "toggle started (closes the view)" },
   { "?", "show this help" },
 }
 
@@ -677,7 +679,10 @@ local function activate(bufnr)
   end
 
   if meta.kind == "annotation" then
-    local opened = require("frontline.mappings").open_resources_in_text(meta.description)
+    -- Files open in the window the View came from; a floating window is no
+    -- place to load a buffer into
+    local opened = require("frontline.mappings")
+      .open_resources_in_text(meta.description, st.origin_win)
     if not opened then
       vim.notify("No URL or file path in this annotation", vim.log.levels.INFO)
     end
@@ -699,30 +704,23 @@ local function go_back(bufnr)
   vim.api.nvim_win_set_cursor(0, { 1, 0 })
 end
 
--- Run an action from mappings.lua in the window the View was opened from, where
--- the cursor is still on the task line those functions read.
-local function delegate_to_origin(bufnr, fn_name)
+-- Toggle done/started on the task the View is showing and stay open, so several
+-- actions can be chained. The callback may fire long after this returns, when
+-- the user has answered a dependency prompt.
+local function toggle_task(bufnr, fn_name)
   local st = get_state(bufnr)
   if not st then
     return
   end
 
-  -- These act on the task line in the origin window, which is no longer the
-  -- task on screen once the user has drilled into a dependency.
-  if #st.history > 0 then
-    vim.notify("Press <BS> to go back to the original task first", vim.log.levels.WARN)
-    return
-  end
-
-  local origin_win = st.origin_win
-
-  close_view(bufnr)
-
-  if origin_win and vim.api.nvim_win_is_valid(origin_win) then
-    vim.api.nvim_win_call(origin_win, function()
-      require("frontline.mappings")[fn_name]()
-    end)
-  end
+  require("frontline.mappings")[fn_name](st.hash, function()
+    -- The View may have been closed while a prompt was open
+    if not (vim.api.nvim_buf_is_valid(bufnr) and state[bufnr]) then
+      return
+    end
+    rerender(bufnr)
+    refresh_origin(st)
+  end)
 end
 
 local function show_help()
@@ -744,8 +742,8 @@ local function setup_keymaps(bufnr)
   map("x", function() toggle_annotation(bufnr) end, "Toggle TODO/DONE annotation")
   map("<CR>", function() activate(bufnr) end, "Open annotation resource or dependency")
   map("<BS>", function() go_back(bufnr) end, "Back to previous task")
-  map("d", function() delegate_to_origin(bufnr, "toggle_done") end, "Toggle task done")
-  map("s", function() delegate_to_origin(bufnr, "toggle_started") end, "Toggle task started")
+  map("d", function() toggle_task(bufnr, "toggle_done") end, "Toggle task done")
+  map("s", function() toggle_task(bufnr, "toggle_started") end, "Toggle task started")
   map("?", show_help, "Show task view keys")
 end
 
