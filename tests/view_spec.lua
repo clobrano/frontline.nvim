@@ -266,12 +266,29 @@ describe("view.render", function()
 
   it("keeps every line within max_width when content is short", function()
     local lines, _, _, width = view.render({ task = base_task() },
-      { convert_dates_to_local = false, max_width = 60 })
+      { convert_dates_to_local = false, min_width = 10, max_width = 60 })
     for _, line in ipairs(lines) do
       assert.is_true(vim.fn.strdisplaywidth(line) <= 60,
         string.format("line too wide: %q", line))
     end
     assert.is_true(width <= 60)
+  end)
+
+  it("widens a narrow task up to min_width", function()
+    local lines, _, _, width = view.render({ task = base_task({ description = "Buy milk" }) },
+      { convert_dates_to_local = false, min_width = 70, max_width = 90 })
+    assert.are.equal(70, width)
+    assert.are.equal(70, vim.fn.strdisplaywidth(lines[1]))
+    -- the hash stays flush against the right edge
+    assert.is_truthy(lines[1]:match("`a2f1c3d8`$"))
+  end)
+
+  it("treats sizes of 1 or less as a fraction of the available space", function()
+    assert.are.equal(50, view.resolve_dimension(0.5, 100))
+    assert.are.equal(90, view.resolve_dimension(0.9, 100))
+    assert.are.equal(80, view.resolve_dimension(80, 100))
+    assert.are.equal(5, view.resolve_dimension(5, 100))
+    assert.is_nil(view.resolve_dimension(nil, 100))
   end)
 
   it("does not lose the hash when the title exceeds max_width", function()

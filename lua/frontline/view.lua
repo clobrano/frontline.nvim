@@ -10,12 +10,17 @@ local ICON_SCHEDULED = "⏱️"
 local ICON_DUE = "⏰"
 local ICON_END = "✅"
 
-local MIN_WIDTH = 40
+-- Hard floor, so a pathologically small screen still produces a usable window
+local ABSOLUTE_MIN_WIDTH = 20
 
--- Default view options, merged with config.view by the caller
+-- Default view options, merged with config.view by the caller.
+-- Sizes are a fraction of the screen when <= 1, and absolute columns/rows
+-- otherwise. The window is sized to its content within these bounds.
 local default_view_config = {
-  max_width = 80,
-  max_height = 0.6,
+  min_width = 0.5,
+  max_width = 0.9,
+  min_height = 5,
+  max_height = 0.85,
   border = "rounded",
   show_urgency = true,
   show_dependencies = true,
@@ -23,6 +28,19 @@ local default_view_config = {
 }
 
 M.default_config = default_view_config
+
+-- Resolve a size that may be expressed as a fraction of the available space
+local function resolve_dimension(value, total)
+  if not value then
+    return nil
+  end
+  if value <= 1 then
+    return math.floor(value * total)
+  end
+  return math.floor(value)
+end
+
+M.resolve_dimension = resolve_dimension
 
 --------------------------------------------------------------------------------
 -- Annotation helpers (pure)
@@ -297,8 +315,14 @@ function M.render(data, opts)
     dep_specs(specs, "Blocking", reverse_deps)
   end
 
-  -- Compose: right-align the trailing hashes against the widest line
-  local width = MIN_WIDTH
+  -- Compose: right-align the trailing hashes against the widest line. The
+  -- window is sized to its content, so the alignment column and the window
+  -- width are the same number.
+  local available = math.max(ABSOLUTE_MIN_WIDTH, (vim.o.columns or 80) - 4)
+  local min_width = resolve_dimension(opts.min_width, available) or ABSOLUTE_MIN_WIDTH
+  local max_width = resolve_dimension(opts.max_width, available) or available
+
+  local width = 0
   for _, spec in ipairs(specs) do
     local w = display_width(spec.left)
     if spec.right then
@@ -308,7 +332,10 @@ function M.render(data, opts)
       width = w
     end
   end
-  width = math.min(width, opts.max_width)
+
+  width = math.min(width, max_width)
+  width = math.max(width, min_width, ABSOLUTE_MIN_WIDTH)
+  width = math.min(width, available)
 
   local lines = {}
   local highlights = {}
@@ -468,9 +495,17 @@ end
 -- Centre a window of the given content size on the editor, clamped to the
 -- configured maximums.
 local function geometry(line_count, width, view_cfg)
-  local win_width = math.max(MIN_WIDTH, math.min(width, vim.o.columns - 4))
-  local max_height = math.max(3, math.floor(vim.o.lines * view_cfg.max_height))
-  local height = math.min(line_count, max_height)
+  -- render already clamped the width to the configured bounds
+  local win_width = math.max(ABSOLUTE_MIN_WIDTH, math.min(width, vim.o.columns - 4))
+
+  -- Leave two rows for the border and one for the command line
+  local available_height = math.max(3, vim.o.lines - 3)
+  local max_height = math.min(available_height,
+    resolve_dimension(view_cfg.max_height, available_height) or available_height)
+  local min_height = math.min(max_height,
+    resolve_dimension(view_cfg.min_height, available_height) or 1)
+
+  local height = math.max(min_height, math.min(line_count, max_height))
 
   return {
     relative = "editor",

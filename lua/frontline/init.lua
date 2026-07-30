@@ -23,11 +23,16 @@ local config = {
   notes_directory = nil, -- Fallback directory for markdown notes (nil = cwd). Overridden by per-workspace notes_directory.
   copy_task_format = "{{description}}",
   default_sort = { field = "urgency", reverse = false }, -- Default sort for all views (field: urgency|priority|due|scheduled|project)
+  -- Task View window. Sizes are a fraction of the screen when <= 1 and
+  -- absolute columns/rows otherwise; the window is sized to its content
+  -- within these bounds.
   view = {
-    max_width = 80,          -- maximum window width in columns
-    max_height = 0.6,        -- maximum window height as a fraction of the screen
+    min_width = 0.5,         -- narrowest the window gets
+    max_width = 0.9,         -- widest the window gets
+    min_height = 5,          -- shortest the window gets, in rows
+    max_height = 0.85,       -- tallest the window gets
     border = "rounded",      -- any value accepted by nvim_open_win's border
-    show_urgency = true,     -- include urgency on the status row
+    show_urgency = true,     -- include urgency on the attribute line
     show_dependencies = true, -- include the "Blocked by" / "Blocking" sections
     annotation_dates = true, -- prefix annotations with their date
   },

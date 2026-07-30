@@ -239,6 +239,13 @@ most tasks are far shorter than the one above:
 
 A task with nothing but a description renders as a single line.
 
+The window is sized to its content and grows with the terminal: the four size
+options are read as a fraction of the screen when they are `1` or less, and as
+absolute columns or rows otherwise. `min_width` keeps short tasks from opening
+as a sliver, `max_width` keeps long annotations from stretching across a wide
+monitor, and `max_height` decides when a task with many annotations starts to
+scroll instead of growing.
+
 Inside the View:
 
 | Key | Action |
@@ -340,10 +347,12 @@ require('frontline').setup({
   enable_reverse_dependencies = true,  -- Show anchor icon for tasks blocking others (default: true)
   reverse_dependencies_warn_threshold = 1000,  -- Warn if queries take > 1000ms (default: 1000)
   view = {
-    max_width = 80,           -- Maximum View width in columns
-    max_height = 0.6,         -- Maximum View height as a fraction of the screen
+    min_width = 0.5,          -- Narrowest the View gets
+    max_width = 0.9,          -- Widest the View gets
+    min_height = 5,           -- Shortest the View gets, in rows
+    max_height = 0.85,        -- Tallest the View gets
     border = "rounded",       -- Any border accepted by nvim_open_win
-    show_urgency = true,      -- Show urgency on the status row
+    show_urgency = true,      -- Show urgency on the attribute line
     show_dependencies = true, -- Show the "Blocked by" / "Blocking" sections
     annotation_dates = true,  -- Prefix annotations with their date
   },
@@ -395,10 +404,12 @@ require('frontline').setup({
 | `reverse_dependencies_warn_threshold` | number | 1000 | Warn if reverse dependency queries take longer than this (in milliseconds). Set to 0 to disable warnings. |
 | `default_sort` | table | `{ field = "urgency", reverse = false }` | Default sort for all views. `field` can be `urgency`, `priority`, `due`, `scheduled`, `completed`, or `project`. Set `reverse = true` to flip the order. |
 | `copy_task_format` | string | `"{{description}}"` | Template for the `<leader>tc` copy-to-clipboard action. See [Copy Task Format](#copy-task-format) below. |
-| `view.max_width` | number | 80 | Maximum width of the task View in columns |
-| `view.max_height` | number | 0.6 | Maximum height of the task View, as a fraction of the screen |
+| `view.min_width` | number | 0.5 | Narrowest the task View gets |
+| `view.max_width` | number | 0.9 | Widest the task View gets |
+| `view.min_height` | number | 5 | Shortest the task View gets |
+| `view.max_height` | number | 0.85 | Tallest the task View gets |
 | `view.border` | string | `"rounded"` | Border style for the task View window |
-| `view.show_urgency` | boolean | true | Show urgency on the View's status row |
+| `view.show_urgency` | boolean | true | Show urgency on the View's attribute line |
 | `view.show_dependencies` | boolean | true | Show the "Blocked by" / "Blocking" sections in the View |
 | `view.annotation_dates` | boolean | true | Prefix annotations in the View with their date |
 | `mappings.toggle_done` | string | `"<leader>td"` | Keybinding to toggle task done/undone |
