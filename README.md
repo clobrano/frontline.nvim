@@ -10,6 +10,7 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 - 🎯 Priority, dependency, reverse dependency, and annotation icons
 - ⚙️ Configurable blank lines after task lists
 - ⌨️ Interactive task management with keybindings
+- 🔎 Compact task View with annotations, dependencies and inline TODO toggling
 - 🕐 Local timezone display for dates and times
 - 🗂️ Multiple Taskwarrior workspaces support with `@workspace` syntax
 - 🎨 Smart autocomplete for projects, tags, dates, workspaces, and priorities
@@ -185,13 +186,121 @@ Place your cursor on any task line and use these default keybindings:
 |------------|--------|-------------|
 | `<leader>td` | Toggle Done | Mark task as complete or reopen it |
 | `<leader>ts` | Toggle Started | Start or stop working on task |
-| `<leader>tm` | Modify Task | Modify task properties (prompts for input) |
+| `<leader>tv` | View Task | Open the compact task View (see below) |
 | `<leader>ta` | Add Annotation | Add a note to the task |
+| `<leader>tt` | Add TODO Annotation | Add a note pre-filled with `TODO: ` |
+| `<leader>tm` | Modify Task | Modify task properties (prompts for input) |
 | `<leader>te` | Edit Task | Open task in Taskwarrior's interactive editor |
 | `<leader>tn` | Create Task | Create new task with smart context-aware pre-fill |
 | `<leader>tB` | Add Dependency | Create new task as dependency of current task |
 | `<leader>tu` | Undo Task | Undo last action on task |
 | `<leader>tb` | Show Dependencies | Show task dependencies and reverse dependencies |
+| `<leader>tr` | Show Blocked Tasks | Show tasks blocked by this task |
+| `<leader>tc` | Copy Task | Copy the task to the clipboard (see [Copy Task Format](#copy-task-format)) |
+| `<leader>to` | Open URL | Open a URL or file path found in the task's annotations |
+| `<leader>tj` | Create Note | Create a Markdown note linked to the task |
+
+### Task View
+
+`<leader>tv` opens a floating window with everything worth knowing about the task
+under the cursor:
+
+```
+╭─ Task ──────────────────────────────────────────────────────╮
+│[S] Refactor the annotation shortcuts             `a2f1c3d8` │
+│🔴 H · frontline.nvim · +nvim +ux · urgency 12.4             │
+│⏱️ 2026-07-31 (tomorrow) · ⏰ 2026-08-02 (+3 days)            │
+│                                                             │
+│Annotations (3)                                              │
+│  ☐ 2026-07-29  TODO: decide the floating window size        │
+│  ☑ 2026-07-29  DONE: survey existing mappings               │
+│  • 2026-07-28  NOTE: "~/notes/frontline-view.md"            │
+│                                                             │
+│Blocked by (2 · 1 open)                                      │
+│  ☐ Design the View layout                      `9b7e0c11`   │
+│  ☑ Read the mappings module                    `41d0a6f2`   │
+│Blocking (1)                                                 │
+│  ☐ Release v0.5.0                              `77aa31b9`   │
+╰─────────────────────────────────────────────────────────────╯
+```
+
+The layout is dense on purpose: the status marker on the title line already says
+pending/started/completed, every date shares one line, and project, tags,
+priority and urgency share another. Each element appears only when it is set, so
+most tasks are far shorter than the one above:
+
+```
+╭─ Task ───────────────────────────────────────╮
+│[ ] Buy milk                       `3fa9c201` │
+│home · urgency 1.2                            │
+│⏰ 2026-07-31 (tomorrow)                       │
+╰──────────────────────────────────────────────╯
+```
+
+A task with nothing but a description renders as a single line.
+
+The window is sized to its content and grows with the terminal: the four size
+options are read as a fraction of the screen when they are `1` or less, and as
+absolute columns or rows otherwise. `min_height` defaults to 70% of the screen
+so the window keeps a steady size whether or not the content fills it — a short
+task in a snug window reads as if something has scrolled out of sight.
+`max_width` keeps long annotations from stretching across a wide monitor, and
+`max_height` decides when a task with many annotations starts to scroll instead
+of growing.
+
+#### Highlight groups
+
+Each element of the View has its own highlight group, so a colorscheme or your
+own config can restyle any one of them. All are defined as links with
+`default = true`, so an existing definition always wins:
+
+| Group | Links to | Applies to |
+|-------|----------|------------|
+| `FrontlineViewDescription` | `Title` | The task description on the title line |
+| `FrontlineViewHash` | `Comment` | Short hashes, on the title and dependency lines |
+| `FrontlineViewPriority` | `Statement` | The priority icon and letter |
+| `FrontlineViewProject` | `Directory` | The project name |
+| `FrontlineViewTags` | `Special` | The `+tag` list |
+| `FrontlineViewRecur` | `Special` | The recurrence period |
+| `FrontlineViewWaiting` | `Comment` | The `waiting` marker |
+| `FrontlineViewUrgency` | `Comment` | The urgency value |
+| `FrontlineViewSeparator` | `Comment` | The `·` between fields |
+| `FrontlineViewOverdue` | `WarningMsg` | A due date in the past |
+| `FrontlineViewSection` | `Title` | The Annotations / Blocked by / Blocking headers |
+| `FrontlineViewTodo` | `WarningMsg` | The `☐` marker of an open annotation |
+| `FrontlineViewDone` | `Comment` | A completed annotation |
+| `FrontlineViewAnnotationDate` | `Comment` | The date prefix on an annotation |
+| `FrontlineViewDepOpen` | `Normal` | An incomplete dependency |
+| `FrontlineViewDepDone` | `Comment` | A completed dependency |
+
+```lua
+vim.api.nvim_set_hl(0, "FrontlineViewProject", { fg = "#7aa2f7", bold = true })
+vim.api.nvim_set_hl(0, "FrontlineViewTags", { fg = "#9ece6a", italic = true })
+```
+
+Inside the View:
+
+| Key | Action |
+|-----|--------|
+| `q`, `<Esc>` | Close the View |
+| `a` | Add an annotation |
+| `x` | Toggle the annotation under the cursor between `TODO:`/`DONE:` (or `[ ]`/`[x]`) |
+| `d` | Toggle done |
+| `s` | Toggle started |
+| `<CR>` | On an annotation: open its URL or file path. On a dependency: open that task's View |
+| `<BS>` | Go back to the previous task after drilling into a dependency |
+| `?` | Show these keys |
+
+Only `q` and `<Esc>` close the window. Every other key re-renders the View in
+place, so actions can be repeated without reopening it — add three annotations
+in a row, tick off several TODOs, or start and stop a task while watching its
+urgency change. Files opened with `<CR>` load into the window the View was
+opened from and are waiting behind it once you close the View.
+
+`x` is the quickest way to clear the outstanding TODOs that block task completion
+when `require_todo_annotations_done` is enabled. Taskwarrior has no "edit
+annotation" command, so the toggle removes the annotation and re-adds it with the
+new text — the annotation's timestamp is reset as a result.
 
 ### Smart Task Creation with Autocomplete
 
@@ -255,6 +364,8 @@ You can also type the commands directly in command mode:
 " Press <leader>tm and enter: priority:H due:tomorrow
 " Press <leader>ta and enter: "Started working on this"
 
+" Press <leader>tv to see the whole task: dates, tags, annotations, dependencies
+
 " Press <leader>te to open the full Taskwarrior editor in a split
 " Edit all task properties, save and close to update
 ```
@@ -273,16 +384,49 @@ require('frontline').setup({
   default_workspace = "personal",  -- Default workspace when none specified (nil = system taskwarrior)
   enable_reverse_dependencies = true,  -- Show anchor icon for tasks blocking others (default: true)
   reverse_dependencies_warn_threshold = 1000,  -- Warn if queries take > 1000ms (default: 1000)
+  view = {
+    min_width = 0.5,          -- Narrowest the View gets
+    max_width = 0.9,          -- Widest the View gets
+    min_height = 0.7,         -- Shortest the View gets
+    max_height = 0.85,        -- Tallest the View gets
+    border = "rounded",       -- Any border accepted by nvim_open_win
+    show_urgency = true,      -- Show urgency on the attribute line
+    show_dependencies = true, -- Show the "Blocked by" / "Blocking" sections
+    annotation_dates = true,  -- Prefix annotations with their date
+  },
   mappings = {
     toggle_done = "<leader>td",      -- Toggle task done/undone
     toggle_started = "<leader>ts",   -- Toggle task started/unstarted
-    modify_task = "<leader>tm",      -- Modify task properties
+    view_task = "<leader>tv",        -- Open the task View
     add_annotation = "<leader>ta",   -- Add task annotation
+    modify_task = "<leader>tm",      -- Modify task properties
     edit_task = "<leader>te",        -- Edit task in Taskwarrior editor
     show_blocking_dependencies = "<leader>tb",  -- Show dependencies
     add_dependency = "<leader>tB",   -- Add task as dependency
     undo_task = "<leader>tu",        -- Undo last action
     create_task = "<leader>tn",      -- Create new task
+  },
+})
+```
+
+### Breaking changes
+
+`<leader>ta` used to list a task's annotations and `<leader>tA` added one. Since
+annotations are created far more often than they are listed, the two have been
+reworked:
+
+- `<leader>ta` now **adds** an annotation (this matches what this README has always documented).
+- `<leader>tA` is no longer bound by default.
+- `<leader>tv` opens the task View, which shows annotations along with the rest of the task.
+
+The standalone annotation list is still available as `mappings.show_annotations`;
+it simply has no default binding any more. If you bind it back to `<leader>ta`,
+your binding wins over `add_annotation` and the plugin warns once at startup.
+
+```lua
+require('frontline').setup({
+  mappings = {
+    show_annotations = "<leader>tA",  -- keep the old list on a different key
   },
 })
 ```
@@ -298,10 +442,21 @@ require('frontline').setup({
 | `reverse_dependencies_warn_threshold` | number | 1000 | Warn if reverse dependency queries take longer than this (in milliseconds). Set to 0 to disable warnings. |
 | `default_sort` | table | `{ field = "urgency", reverse = false }` | Default sort for all views. `field` can be `urgency`, `priority`, `due`, `scheduled`, `completed`, or `project`. Set `reverse = true` to flip the order. |
 | `copy_task_format` | string | `"{{description}}"` | Template for the `<leader>tc` copy-to-clipboard action. See [Copy Task Format](#copy-task-format) below. |
+| `view.min_width` | number | 0.5 | Narrowest the task View gets |
+| `view.max_width` | number | 0.9 | Widest the task View gets |
+| `view.min_height` | number | 0.7 | Shortest the task View gets |
+| `view.max_height` | number | 0.85 | Tallest the task View gets |
+| `view.border` | string | `"rounded"` | Border style for the task View window |
+| `view.show_urgency` | boolean | true | Show urgency on the View's attribute line |
+| `view.show_dependencies` | boolean | true | Show the "Blocked by" / "Blocking" sections in the View |
+| `view.annotation_dates` | boolean | true | Prefix annotations in the View with their date |
 | `mappings.toggle_done` | string | `"<leader>td"` | Keybinding to toggle task done/undone |
 | `mappings.toggle_started` | string | `"<leader>ts"` | Keybinding to toggle task started/unstarted |
+| `mappings.view_task` | string | `"<leader>tv"` | Keybinding to open the task View |
 | `mappings.modify_task` | string | `"<leader>tm"` | Keybinding to modify task |
 | `mappings.add_annotation` | string | `"<leader>ta"` | Keybinding to add annotation |
+| `mappings.show_annotations` | string | `nil` | Keybinding to list annotations only (no default; the View covers this) |
+| `mappings.add_todo_annotation` | string | `"<leader>tt"` | Keybinding to add an annotation pre-filled with `TODO: ` |
 | `mappings.edit_task` | string | `"<leader>te"` | Keybinding to edit task in Taskwarrior editor |
 | `mappings.show_blocking_dependencies` | string | `"<leader>tb"` | Keybinding to show dependencies (forward and reverse) |
 | `mappings.add_dependency` | string | `"<leader>tB"` | Keybinding to add task as dependency |

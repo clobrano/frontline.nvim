@@ -15,7 +15,7 @@ function M.set_config(new_config)
 end
 
 -- Extract task hash from the current line
--- Expected format: * [status] description ... (hash)
+-- Expected format: * [status] description ... `hash`
 function M.get_task_hash_under_cursor()
   local line = vim.api.nvim_get_current_line()
 
@@ -180,14 +180,7 @@ end
 -- Matches annotations starting with "TODO:" (case-insensitive) or markdown
 -- checkboxes "[ ]". The done equivalents are "DONE:" and "[x]"/"[X]".
 local function is_todo_annotation(description)
-  if string.match(description:upper(), "^TODO:") then
-    return true
-  end
-  -- Match markdown checkbox: "[ ] ..." (unchecked)
-  if string.match(description, "^%[ %]") then
-    return true
-  end
-  return false
+  return require("frontline.view").annotation_state(description) == "todo"
 end
 
 local function get_todo_annotations(task)
@@ -213,11 +206,23 @@ local function get_todo_annotations(task)
   return nil
 end
 
--- Toggle task between done and undone
-function M.toggle_done()
-  local hash = M.get_task_hash_under_cursor()
+-- Toggle task between done and undone.
+-- Both arguments are optional and used by the task View, which acts on the task
+-- it is showing rather than the one under the cursor, and refreshes itself
+-- instead of the markdown buffer. on_complete may run asynchronously, after the
+-- user answers a prompt.
+function M.toggle_done(hash, on_complete)
+  hash = hash or M.get_task_hash_under_cursor()
   if not hash then
     return
+  end
+
+  local function finish()
+    if on_complete then
+      on_complete()
+    else
+      require("frontline").refresh_current_buffer(hash)
+    end
   end
 
   -- Get current workspace for proper task operations
@@ -248,7 +253,7 @@ function M.toggle_done()
     vim.notify("Reopening task...", vim.log.levels.INFO)
 
     if execute_task_command(string.format("%s modify status:pending", hash), workspace) then
-      require("frontline").refresh_current_buffer(hash)
+      finish()
     end
   else
     -- Check for TODO annotations if feature is enabled
@@ -289,7 +294,7 @@ function M.toggle_done()
 
       -- Add hint for TODOs
       table.insert(echo_chunks, {"Hint: Change 'TODO:' to 'DONE:' (or '[ ]' to '[x]') in annotations to enable task completion.\n", "WarningMsg"})
-      table.insert(echo_chunks, {"Use " .. (config.mappings.show_annotations or "<leader>ta") .. " to view annotations, then 'task <hash> denotate' and 'task <hash> annotate' to update them.", "Comment"})
+      table.insert(echo_chunks, {"Use " .. (config.mappings.view_task or "<leader>tv") .. " to open the task View, then press 'x' on an annotation to toggle it.", "Comment"})
 
       vim.api.nvim_echo(echo_chunks, true, {})
       return
@@ -352,13 +357,13 @@ function M.toggle_done()
               vim.notify("All tasks marked as done", vim.log.levels.INFO)
             end
 
-            require("frontline").refresh_current_buffer(hash)
+            finish()
           elseif idx == 3 then
             -- Mark task done, ignore dependencies
             vim.notify("Marking task as done (ignoring dependencies)...", vim.log.levels.INFO)
 
             if execute_task_command(string.format("%s done", hash), workspace) then
-              require("frontline").refresh_current_buffer(hash)
+              finish()
             end
           end
         end
@@ -368,7 +373,7 @@ function M.toggle_done()
       vim.notify("Marking task as done...", vim.log.levels.INFO)
 
       if execute_task_command(string.format("%s done", hash), workspace) then
-        require("frontline").refresh_current_buffer(hash)
+        finish()
       end
     end
   end
@@ -410,9 +415,9 @@ function M.show_blocking_dependencies()
 
   if task.depends and #task.depends > 0 then
     for _, dep_uuid in ipairs(task.depends) do
-      local dep_cmd = build_task_command(string.format("%s export", dep_uuid))
+      local dep_cmd = build_task_command(string.format("%s export", dep_uuid), workspace)
       local dep_json = vim.fn.system(dep_cmd)
-      dep_json = filter_taskwarrior_messages(dep_json, nil)
+      dep_json = filter_taskwarrior_messages(dep_json, workspace)
       if vim.v.shell_error == 0 then
         local dep_success, dep_tasks = pcall(vim.fn.json_decode, dep_json)
         if dep_success and dep_tasks and #dep_tasks > 0 then
@@ -456,7 +461,7 @@ function M.show_blocking_dependencies()
   local reverse_deps = {}
   if config.enable_reverse_dependencies then
     local task_client = require("frontline.task_client")
-    local reverse_deps_tasks, rev_err = task_client.get_reverse_dependencies(task.uuid)
+    local reverse_deps_tasks, rev_err = task_client.get_reverse_dependencies(task.uuid, get_workspace_rc())
 
     if not rev_err and reverse_deps_tasks then
       for _, rev_task in ipairs(reverse_deps_tasks) do
@@ -552,7 +557,7 @@ function M.show_blocked_tasks()
 
   local task = tasks[1]
   local task_client = require("frontline.task_client")
-  local reverse_deps_tasks, rev_err = task_client.get_reverse_dependencies(task.uuid)
+  local reverse_deps_tasks, rev_err = task_client.get_reverse_dependencies(task.uuid, get_workspace_rc())
 
   if rev_err then
     vim.notify("Failed to get blocked tasks: " .. rev_err, vim.log.levels.ERROR)
@@ -743,9 +748,10 @@ function M.add_task_as_dependency()
   end
 end
 
--- Toggle task between started and unstarted
-function M.toggle_started()
-  local hash = M.get_task_hash_under_cursor()
+-- Toggle task between started and unstarted.
+-- Takes the same optional hash and on_complete as toggle_done.
+function M.toggle_started(hash, on_complete)
+  hash = hash or M.get_task_hash_under_cursor()
   if not hash then
     return
   end
@@ -785,7 +791,11 @@ function M.toggle_started()
   end
 
   if execute_task_command(task_args, workspace) then
-    require("frontline").refresh_current_buffer(hash)
+    if on_complete then
+      on_complete()
+    else
+      require("frontline").refresh_current_buffer(hash)
+    end
   end
 end
 
@@ -1527,8 +1537,10 @@ local function should_open_in_neovim(path)
   return false
 end
 
--- Helper function to open a resource (URL or file path) with platform-specific command
-local function open_resource(resource)
+-- Helper function to open a resource (URL or file path) with platform-specific command.
+-- target_win is where text files are opened; callers whose current window cannot
+-- hold a file, such as the task View's floating window, pass their origin window.
+local function open_resource(resource, target_win)
   -- Expand ~ to home directory for file paths
   if resource:match("^~") then
     resource = resource:gsub("^~", os.getenv("HOME") or "~")
@@ -1539,7 +1551,14 @@ local function open_resource(resource)
     -- Check if file exists before trying to open
     local stat = vim.loop.fs_stat(resource)
     if stat then
-      vim.cmd("edit " .. vim.fn.fnameescape(resource))
+      local function edit()
+        vim.cmd("edit " .. vim.fn.fnameescape(resource))
+      end
+      if target_win and vim.api.nvim_win_is_valid(target_win) then
+        vim.api.nvim_win_call(target_win, edit)
+      else
+        edit()
+      end
       vim.notify(string.format("Opened in Neovim: %s", resource), vim.log.levels.INFO)
     else
       vim.notify(string.format("File not found: %s", resource), vim.log.levels.WARN)
@@ -1580,7 +1599,7 @@ local function is_fzf_vim_available()
 end
 
 -- Select and open a resource (URL or file path) using the best available picker
-local function select_and_open_resource(resources, annotations_map)
+local function select_and_open_resource(resources, annotations_map, target_win)
   -- Build display items with full annotation context
   local display_items = {}
   for i, resource in ipairs(resources) do
@@ -1618,7 +1637,7 @@ local function select_and_open_resource(resources, annotations_map)
           local selection = action_state.get_selected_entry()
           actions.close(prompt_bufnr)
           if selection then
-            open_resource(selection.value)
+            open_resource(selection.value, target_win)
           end
         end)
         return true
@@ -1646,7 +1665,7 @@ local function select_and_open_resource(resources, annotations_map)
         -- Extract index from selection (format: "N. annotation text")
         local idx = tonumber(string.match(selected, "^(%d+)%."))
         if idx and _G._frontline_resource_list[idx] then
-          open_resource(_G._frontline_resource_list[idx])
+          open_resource(_G._frontline_resource_list[idx], target_win)
         end
         _G._frontline_resource_list = nil
       end
@@ -1667,7 +1686,7 @@ local function select_and_open_resource(resources, annotations_map)
     end
   }, function(choice, idx)
     if choice and resources[idx] then
-      open_resource(resources[idx])
+      open_resource(resources[idx], target_win)
     end
   end)
 end
@@ -1813,6 +1832,52 @@ function M.create_note()
   end)
 end
 
+-- Collect every URL and file path found in the given texts, preserving order
+-- and skipping duplicates. Returns the resource list plus a map from each
+-- resource back to the text it was found in (used as the picker label).
+local function collect_resources(texts)
+  local resources = {}
+  local seen = {}
+  local source_map = {}
+
+  local function add(resource, text)
+    if not seen[resource] then
+      seen[resource] = true
+      table.insert(resources, resource)
+      source_map[resource] = text
+    end
+  end
+
+  for _, text in ipairs(texts) do
+    for _, url in ipairs(extract_urls(text)) do
+      add(url, text)
+    end
+    for _, path in ipairs(extract_file_paths(text)) do
+      add(path, text)
+    end
+  end
+
+  return resources, source_map
+end
+
+-- Open the URL or file path contained in a single piece of text, prompting when
+-- there is more than one. Returns false when the text contains none.
+-- Used by the task View to act on the annotation under the cursor, which passes
+-- its origin window so files do not get loaded into the floating window.
+function M.open_resources_in_text(text, target_win)
+  local resources, source_map = collect_resources({ text or "" })
+
+  if #resources == 0 then
+    return false
+  elseif #resources == 1 then
+    open_resource(resources[1], target_win)
+  else
+    select_and_open_resource(resources, source_map, target_win)
+  end
+
+  return true
+end
+
 -- Open URL or file path from task annotations
 function M.open_url()
   local hash = M.get_task_hash_under_cursor()
@@ -1850,33 +1915,12 @@ function M.open_url()
   end
 
   -- Extract all URLs and file paths from all annotations
-  local all_resources = {}
-  local resource_seen = {}  -- To avoid duplicates
-  local annotations_map = {}  -- Map resource to its annotation text
-
+  local annotation_texts = {}
   for _, annotation in ipairs(task.annotations) do
-    local description = annotation.description or ""
-
-    -- Extract URLs
-    local urls = extract_urls(description)
-    for _, url in ipairs(urls) do
-      if not resource_seen[url] then
-        resource_seen[url] = true
-        table.insert(all_resources, url)
-        annotations_map[url] = description
-      end
-    end
-
-    -- Extract file paths
-    local paths = extract_file_paths(description)
-    for _, path in ipairs(paths) do
-      if not resource_seen[path] then
-        resource_seen[path] = true
-        table.insert(all_resources, path)
-        annotations_map[path] = description
-      end
-    end
+    table.insert(annotation_texts, annotation.description or "")
   end
+
+  local all_resources, annotations_map = collect_resources(annotation_texts)
 
   -- Handle based on number of resources found
   if #all_resources == 0 then

@@ -23,12 +23,30 @@ local config = {
   notes_directory = nil, -- Fallback directory for markdown notes (nil = cwd). Overridden by per-workspace notes_directory.
   copy_task_format = "{{description}}",
   default_sort = { field = "urgency", reverse = false }, -- Default sort for all views (field: urgency|priority|due|scheduled|project)
+  -- Task View window. Sizes are a fraction of the screen when <= 1 and
+  -- absolute columns/rows otherwise; the window is sized to its content
+  -- within these bounds.
+  view = {
+    min_width = 0.5,         -- narrowest the window gets
+    max_width = 0.9,         -- widest the window gets
+    min_height = 0.7,        -- shortest the window gets, so short tasks do not
+                             -- look like they are hiding scrolled-off content
+    max_height = 0.85,       -- tallest the window gets
+    border = "rounded",      -- any value accepted by nvim_open_win's border
+    show_urgency = true,     -- include urgency on the attribute line
+    show_dependencies = true, -- include the "Blocked by" / "Blocking" sections
+    annotation_dates = true, -- prefix annotations with their date
+  },
   mappings = {
     toggle_done = "<leader>td",
     toggle_started = "<leader>ts",
     modify_task = "<leader>tm",
-    show_annotations = "<leader>ta",
-    add_annotation = "<leader>tA",
+    view_task = "<leader>tv",
+    add_annotation = "<leader>ta",
+    -- show_annotations has no default binding: the task View (view_task) shows
+    -- annotations along with the rest of the task. Set it explicitly to keep
+    -- the standalone annotation list on a key of your choice.
+    show_annotations = nil,
     edit_task = "<leader>te",
     show_blocking_dependencies = "<leader>tb",
     show_blocked_tasks = "<leader>tr",
@@ -79,6 +97,12 @@ end
 -- Expose function to get current workspace
 function M.get_current_workspace()
   return current_workspace
+end
+
+-- Expose the resolved rc file path for the current workspace (nil for the
+-- system-default Taskwarrior database)
+function M.get_current_workspace_rc()
+  return get_workspace_rc(current_workspace)
 end
 
 -- Expose function to get config
@@ -271,7 +295,8 @@ function M.refresh_current_buffer(task_hash)
   if task_hash then
     local bufnr = vim.api.nvim_get_current_buf()
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local search_str = "(" .. task_hash .. ")"
+    -- Task lines carry the hash in backticks, e.g. * [ ] Description `a2f1c3d8`
+    local search_str = "`" .. task_hash .. "`"
     for lnum, line in ipairs(lines) do
       if line:find(search_str, 1, true) then
         if saved_pos and lnum ~= saved_pos[1] then
@@ -294,6 +319,18 @@ function M.setup(opts)
 
   -- Merge user config with defaults
   config = vim.tbl_deep_extend("force", config, opts)
+
+  -- <leader>ta now adds an annotation instead of listing them. Warn users whose
+  -- config still binds show_annotations to the same key, where their explicit
+  -- binding silently shadows add_annotation.
+  if config.mappings.show_annotations
+    and config.mappings.show_annotations == config.mappings.add_annotation then
+    vim.notify(string.format(
+      "Frontline: mappings.show_annotations and mappings.add_annotation are both %s. " ..
+      "show_annotations wins; annotations are now part of the task View (%s).",
+      config.mappings.show_annotations, config.mappings.view_task or "view_task"),
+      vim.log.levels.WARN)
+  end
 
   -- Update the exposed config reference so completion module gets the merged config
   M.config = config
@@ -344,16 +381,23 @@ function M.setup(opts)
           vim.tbl_extend("force", opts_mapping, { desc = "Modify task" }))
       end
 
-      -- Show annotations
-      if config.mappings.show_annotations then
-        vim.keymap.set("n", config.mappings.show_annotations, mappings.show_annotations,
-          vim.tbl_extend("force", opts_mapping, { desc = "Show task annotations" }))
+      -- View task details (description, status, dates, tags, annotations, dependencies)
+      if config.mappings.view_task then
+        vim.keymap.set("n", config.mappings.view_task, require("frontline.view").open,
+          vim.tbl_extend("force", opts_mapping, { desc = "View task details" }))
       end
 
       -- Add annotation
       if config.mappings.add_annotation then
         vim.keymap.set("n", config.mappings.add_annotation, mappings.add_annotation,
           vim.tbl_extend("force", opts_mapping, { desc = "Add task annotation" }))
+      end
+
+      -- Show annotations only (no default binding; registered last so an
+      -- explicit user binding wins over the defaults above)
+      if config.mappings.show_annotations then
+        vim.keymap.set("n", config.mappings.show_annotations, mappings.show_annotations,
+          vim.tbl_extend("force", opts_mapping, { desc = "Show task annotations" }))
       end
 
       -- Edit task
