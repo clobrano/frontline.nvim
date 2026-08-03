@@ -991,8 +991,10 @@ local function parse_iso_date_for_copy(iso_date)
   return formatted
 end
 
-local function render_copy_template(format_str, task)
-  local replacements = {
+-- Values available to the {{placeholder}} syntax used by the copy format and
+-- by user-provided note templates.
+local function template_replacements(task)
+  return {
     description = task.description or "",
     uuid = task.uuid or "",
     short_uuid = string.sub(task.uuid or "", 1, 8),
@@ -1004,6 +1006,10 @@ local function render_copy_template(format_str, task)
     scheduled = parse_iso_date_for_copy(task.scheduled),
     urgency = task.urgency and tostring(task.urgency) or "",
   }
+end
+
+local function render_copy_template(format_str, task)
+  local replacements = template_replacements(task)
 
   local result = format_str:gsub("{{%s*([%w_]+)%s*}}", function(key)
     return replacements[key] or ""
@@ -1704,6 +1710,106 @@ local function sanitize_filename(str)
   return sanitized
 end
 
+-- Expand the {{placeholder}} syntax in a user-provided note template.
+-- Unlike the copy format, placeholders we do not know about are left untouched:
+-- a template living in the user's vault may carry placeholders meant for another
+-- plugin, and blanking them out would silently mangle the note.
+local function render_note_template(template, task)
+  local replacements = template_replacements(task)
+  replacements.title = replacements.description
+  replacements.date = os.date("%Y-%m-%d")
+  replacements.time = os.date("%H:%M")
+
+  local result = template:gsub("{{%s*([%w_]+)%s*}}", function(key)
+    return replacements[key]
+  end)
+
+  return result
+end
+
+-- Guarantee the note carries the `task:` metadata linking it back to Taskwarrior.
+-- Templates never provide this (and must not be trusted to): frontline owns the
+-- field, so an existing top-level `task:` key is overwritten, a missing one is
+-- added to the frontmatter, and a note without frontmatter gets one.
+local function ensure_task_metadata(content, short_uuid)
+  content = content or ""
+  local task_line = string.format("task: `%s`", short_uuid)
+  local lines = vim.split(content, "\n", { plain = true })
+
+  -- YAML frontmatter only counts when it opens on the very first line
+  if lines[1] and lines[1]:match("^%-%-%-%s*$") then
+    for i = 2, #lines do
+      if lines[i]:match("^%-%-%-%s*$") or lines[i]:match("^%.%.%.%s*$") then
+        -- Closing delimiter found: the block spans lines 2..i-1
+        for j = 2, i - 1 do
+          -- Only top-level keys; an indented `task:` belongs to a nested mapping
+          if lines[j]:match("^task%s*:") then
+            lines[j] = task_line
+            return table.concat(lines, "\n")
+          end
+        end
+        table.insert(lines, i, task_line)
+        return table.concat(lines, "\n")
+      end
+    end
+    -- Unterminated frontmatter: fall through and prepend our own block
+  end
+
+  local frontmatter = string.format("---\n%s\n---\n", task_line)
+  if content == "" then
+    return frontmatter
+  end
+  return frontmatter .. "\n" .. content
+end
+
+-- Resolve the note template path: per-workspace > global > nil (built-in template).
+-- Relative paths are looked up inside the notes directory, so a vault-local
+-- template can be configured as e.g. "templates/task.md".
+local function resolve_note_template(notes_dir)
+  local template = nil
+
+  local ws_name = require("frontline").get_current_workspace()
+  if ws_name then
+    local ws_entry = config.workspaces and config.workspaces[ws_name]
+    if type(ws_entry) == "table" and ws_entry.note_template then
+      template = ws_entry.note_template
+    end
+  end
+
+  template = template or config.note_template
+  if not template or template == "" then
+    return nil
+  end
+
+  local expanded = vim.fn.expand(template)
+  if vim.fn.filereadable(expanded) == 1 then
+    return expanded
+  end
+
+  if notes_dir and not expanded:match("^/") then
+    local in_vault = notes_dir .. "/" .. expanded
+    if vim.fn.filereadable(in_vault) == 1 then
+      return in_vault
+    end
+  end
+
+  vim.notify(
+    string.format("Note template not readable: %s (using built-in template)", template),
+    vim.log.levels.WARN
+  )
+  return nil
+end
+
+local function read_file(path)
+  local file = io.open(path, "r")
+  if not file then
+    return nil
+  end
+  local content = file:read("*a")
+  file:close()
+  return content
+end
+
 -- Create a markdown note from the task under cursor
 function M.create_note()
   local hash = M.get_task_hash_under_cursor()
@@ -1800,12 +1906,32 @@ function M.create_note()
       return
     end
 
-    -- Build note content with frontmatter above the title (Obsidian.nvim style)
-    local content = string.format(
-      "---\ntask: `%s`\n---\n\n# %s\n",
-      short_uuid,
-      description
-    )
+    -- Body comes from the user's template when one is configured, otherwise from
+    -- the built-in one. Either way frontline appends the `task:` metadata below.
+    local body = nil
+    local template_path = resolve_note_template(notes_dir)
+    if template_path then
+      local template = read_file(template_path)
+      if template then
+        body = render_note_template(template, task)
+        if body ~= "" and not body:match("\n$") then
+          body = body .. "\n"
+        end
+      else
+        vim.notify(
+          string.format("Failed to read note template: %s (using built-in template)", template_path),
+          vim.log.levels.WARN
+        )
+      end
+    end
+
+    if not body then
+      -- Built-in template: the title only, frontmatter is added below
+      -- (Obsidian.nvim style)
+      body = string.format("# %s\n", description)
+    end
+
+    local content = ensure_task_metadata(body, short_uuid)
 
     -- Write the file
     local file = io.open(full_path, "w")
@@ -1936,5 +2062,7 @@ function M.open_url()
 end
 
 M._render_copy_template = render_copy_template
+M._render_note_template = render_note_template
+M._ensure_task_metadata = ensure_task_metadata
 
 return M

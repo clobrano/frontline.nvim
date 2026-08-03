@@ -442,6 +442,8 @@ require('frontline').setup({
 | `reverse_dependencies_warn_threshold` | number | 1000 | Warn if reverse dependency queries take longer than this (in milliseconds). Set to 0 to disable warnings. |
 | `default_sort` | table | `{ field = "urgency", reverse = false }` | Default sort for all views. `field` can be `urgency`, `priority`, `due`, `scheduled`, `completed`, or `project`. Set `reverse = true` to flip the order. |
 | `copy_task_format` | string | `"{{description}}"` | Template for the `<leader>tc` copy-to-clipboard action. See [Copy Task Format](#copy-task-format) below. |
+| `notes_directory` | string | `nil` | Directory where task notes are created (nil = current working directory). Overridden per workspace. |
+| `note_template` | string | `nil` | Markdown file used as the note template (nil = built-in template). See [Task Notes](#task-notes) below. |
 | `view.min_width` | number | 0.5 | Narrowest the task View gets |
 | `view.max_width` | number | 0.9 | Widest the task View gets |
 | `view.min_height` | number | 0.7 | Shortest the task View gets |
@@ -507,6 +509,97 @@ Available placeholders:
 | `{{urgency}}` | Urgency score | `15.5` |
 
 Empty placeholders are replaced with an empty string and trailing whitespace is trimmed.
+
+### Task Notes
+
+`<leader>tj` creates a Markdown note for the task under the cursor, links it back
+to the task with a `NOTE: "path"` annotation, and opens it. The file is created in
+`notes_directory` (or the current working directory), and the proposed path can be
+edited in the prompt.
+
+By default the note uses the built-in template:
+
+```markdown
+---
+task: `abcdef12`
+---
+
+# Fix the login bug
+```
+
+Set `note_template` to use one of your own templates instead — typically a file
+already living in your vault:
+
+```lua
+require('frontline').setup({
+  notes_directory = "~/notes",
+  note_template = "templates/task.md",  -- relative paths resolve inside notes_directory
+  -- note_template = "~/notes/templates/task.md",  -- absolute paths work too
+
+  -- Both options can also be set per workspace:
+  workspaces = {
+    work = {
+      rc = "~/.config/taskwarrior/work/.taskrc",
+      notes_directory = "~/notes/work",
+      note_template = "templates/work-task.md",
+    },
+  },
+})
+```
+
+The per-workspace value wins over the global one, which wins over the built-in
+template. If the configured file cannot be read, frontline warns and falls back to
+the built-in template rather than failing the note creation.
+
+**The `task:` metadata is always added by frontline.** A template — built-in or
+your own — never has to (and never can) provide the link to Taskwarrior:
+
+- No frontmatter in the template → frontline prepends a block containing `task:`.
+- Frontmatter present → `task:` is added to it, keeping your other keys.
+- A `task:` key already in the frontmatter → frontline overwrites its value.
+
+So a template like this:
+
+```markdown
+---
+tags: [task, work]
+created: {{date}}
+---
+
+# {{title}}
+
+## Context
+
+## Next steps
+```
+
+produces:
+
+```markdown
+---
+tags: [task, work]
+created: 2025-12-25
+task: `abcdef12`
+---
+
+# Fix the login bug
+
+## Context
+
+## Next steps
+```
+
+Templates support the same placeholders as [Copy Task Format](#copy-task-format),
+plus:
+
+| Placeholder | Description | Example |
+|-------------|-------------|---------|
+| `{{title}}` | Task description (alias of `{{description}}`) | `Fix the login bug` |
+| `{{date}}` | Current date | `2025-12-25` |
+| `{{time}}` | Current time | `10:30` |
+
+Unlike the copy format, placeholders frontline does not recognise are left in the
+note untouched, so templates shared with other plugins keep working.
 
 ## Requirements
 
