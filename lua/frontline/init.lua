@@ -16,11 +16,16 @@ local config = {
     -- personal = "~/.config/taskwarrior/personal/.taskrc",
     -- Example configuration (table form with per-workspace notes directory):
     -- work = { rc = "~/.config/taskwarrior/work/.taskrc", notes_directory = "~/notes/work" },
+    -- Per-workspace note templates are supported too:
+    -- work = { rc = "...", notes_directory = "~/notes/work", note_template = "templates/task.md" },
   },
   default_workspace = nil, -- Name of the default workspace (uses system taskwarrior if nil)
   enable_reverse_dependencies = true, -- Enable reverse dependency tracking (anchor icon and "tasks this task is blocking" view)
   require_todo_annotations_done = true, -- Prevents task completion if there are annotations starting with "TODO:" or "[ ]" (must be changed to "DONE:" or "[x]")
   notes_directory = nil, -- Fallback directory for markdown notes (nil = cwd). Overridden by per-workspace notes_directory.
+  note_template = nil, -- Path to a markdown file used as the note template (nil = built-in template).
+                       -- Relative paths are resolved inside notes_directory. Overridden by per-workspace note_template.
+                       -- The `task:` frontmatter linking the note to Taskwarrior is always added by frontline.
   copy_task_format = "{{description}}",
   default_sort = { field = "urgency", reverse = false }, -- Default sort for all views (field: urgency|priority|due|scheduled|project)
   -- Task View window. Sizes are a fraction of the screen when <= 1 and
