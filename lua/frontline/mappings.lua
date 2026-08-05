@@ -1056,9 +1056,13 @@ function M.copy_task()
   vim.notify(string.format("Copied: %s", text_to_copy), vim.log.levels.INFO)
 end
 
--- Edit task in Taskwarrior's interactive editor
-function M.edit_task()
-  local hash = M.get_task_hash_under_cursor()
+-- Edit task in Taskwarrior's interactive editor.
+-- Both arguments are optional and used by the task View, which edits the task it
+-- is showing and reopens itself instead of refreshing the markdown buffer.
+-- on_complete receives whether the editor exited successfully, and runs for both
+-- outcomes so a caller can restore its own state after a cancelled edit.
+function M.edit_task(hash, on_complete)
+  hash = hash or M.get_task_hash_under_cursor()
   if not hash then
     return
   end
@@ -1066,8 +1070,19 @@ function M.edit_task()
   -- Get current workspace for proper task operations
   local workspace = require("frontline").get_current_workspace()
 
-  -- Save current Neovim state
-  vim.cmd("write")
+  local function finish(success)
+    if on_complete then
+      on_complete(success)
+    elseif success then
+      require("frontline").refresh_current_buffer(hash)
+    end
+  end
+
+  -- Save current Neovim state. The task View calls in from a scratch floating
+  -- buffer, which has no file behind it to write.
+  if vim.bo.buftype == "" and vim.api.nvim_buf_get_name(0) ~= "" then
+    vim.cmd("write")
+  end
 
   -- Open task edit in a terminal buffer
   vim.notify("Opening task editor...", vim.log.levels.INFO)
@@ -1080,21 +1095,28 @@ function M.edit_task()
   vim.cmd("split")
   vim.api.nvim_win_set_buf(0, bufnr)
 
+  -- Close the window we opened rather than whatever is current when the editor
+  -- exits: the callback may run long after the user moved somewhere else.
+  local term_win = vim.api.nvim_get_current_win()
+
   -- Start terminal with task edit command
   local edit_cmd = build_task_command(string.format("%s edit", hash), workspace)
   local term_job = vim.fn.termopen(edit_cmd, {
     on_exit = function(_, exit_code, _)
-      if exit_code == 0 then
-        vim.notify("Task updated", vim.log.levels.INFO)
-        -- Close the terminal window
-        vim.cmd("close")
-        vim.schedule(function()
-          require("frontline").refresh_current_buffer(hash)
-        end)
-      else
-        vim.notify("Task edit cancelled or failed", vim.log.levels.WARN)
-        vim.cmd("close")
-      end
+      local success = exit_code == 0
+      vim.schedule(function()
+        if success then
+          vim.notify("Task updated", vim.log.levels.INFO)
+        else
+          vim.notify("Task edit cancelled or failed", vim.log.levels.WARN)
+        end
+
+        if vim.api.nvim_win_is_valid(term_win) then
+          pcall(vim.api.nvim_win_close, term_win, true)
+        end
+
+        finish(success)
+      end)
     end
   })
 

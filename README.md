@@ -287,6 +287,7 @@ Inside the View:
 | `x` | Toggle the annotation under the cursor between `TODO:`/`DONE:` (or `[ ]`/`[x]`) |
 | `d` | Toggle done |
 | `s` | Toggle started |
+| `e` | Edit the task in Taskwarrior's interactive editor, the same one `<leader>te` opens |
 | `<CR>` | On an annotation: open its URL or file path. On a dependency: open that task's View |
 | `<BS>` | Go back to the previous task after drilling into a dependency |
 | `?` | Show these keys |
@@ -296,6 +297,12 @@ place, so actions can be repeated without reopening it — add three annotations
 in a row, tick off several TODOs, or start and stop a task while watching its
 urgency change. Files opened with `<CR>` load into the window the View was
 opened from and are waiting behind it once you close the View.
+
+`e` is the exception: Taskwarrior's editor needs a full window, so the View steps
+aside, the editor takes over the window the View was opened from, and the View
+comes back on the same task once you write and quit — including the drill-down
+history, so `<BS>` still walks back out of the dependencies you followed to get
+there. Cancelling the edit brings the View back untouched.
 
 `x` is the quickest way to clear the outstanding TODOs that block task completion
 when `require_todo_annotations_done` is enabled. Taskwarrior has no "edit

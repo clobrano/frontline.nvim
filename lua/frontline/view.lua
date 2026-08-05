@@ -480,13 +480,15 @@ end
 local state = {}
 
 -- Every action except q/<Esc> leaves the View open and re-renders it, so they
--- can be repeated without reopening the window.
+-- can be repeated without reopening the window. 'e' is the one that has to step
+-- aside for a full window, and reopens the View once the editor is done.
 local KEYMAP_HELP = {
   { "q, <Esc>", "close the view" },
   { "a", "add an annotation" },
   { "x", "toggle TODO/DONE on the annotation under the cursor" },
   { "d", "toggle done" },
   { "s", "toggle started" },
+  { "e", "edit the task in Taskwarrior's editor" },
   { "<CR>", "open the annotation's URL or file, or drill into a dependency" },
   { "<BS>", "go back to the previous task" },
   { "?", "show this help" },
@@ -723,6 +725,43 @@ local function toggle_task(bufnr, fn_name)
   end)
 end
 
+-- Hand the task over to Taskwarrior's interactive editor, the same one the
+-- edit_task mapping opens. The editor runs in a terminal split, which a floating
+-- window cannot host, so the View closes, the editor takes over the window the
+-- View was opened from, and the View comes back on the same task afterwards.
+local function edit_task(bufnr)
+  local st = get_state(bufnr)
+  if not st then
+    return
+  end
+
+  local hash = st.hash
+  local workspace_rc = st.workspace_rc
+  local origin_win = st.origin_win
+  local history = st.history
+
+  close_view(bufnr)
+
+  if origin_win and vim.api.nvim_win_is_valid(origin_win) then
+    vim.api.nvim_set_current_win(origin_win)
+  end
+
+  require("frontline.mappings").edit_task(hash, function(success)
+    -- The editor's window has just closed, so make sure the markdown buffer is
+    -- current again before it gets refreshed and the View reopened over it.
+    if origin_win and vim.api.nvim_win_is_valid(origin_win) then
+      vim.api.nvim_set_current_win(origin_win)
+    end
+
+    if success then
+      -- Task lines carry the 8 character hash, so a full UUID never matches
+      require("frontline").refresh_current_buffer(string.sub(hash, 1, 8))
+    end
+
+    M.open_hash(hash, workspace_rc, history)
+  end)
+end
+
 local function show_help()
   local chunks = { { "Task View keys:\n", "Title" } }
   for _, entry in ipairs(KEYMAP_HELP) do
@@ -744,11 +783,14 @@ local function setup_keymaps(bufnr)
   map("<BS>", function() go_back(bufnr) end, "Back to previous task")
   map("d", function() toggle_task(bufnr, "toggle_done") end, "Toggle task done")
   map("s", function() toggle_task(bufnr, "toggle_started") end, "Toggle task started")
+  map("e", function() edit_task(bufnr) end, "Edit task in Taskwarrior's editor")
   map("?", show_help, "Show task view keys")
 end
 
--- Open the View for a task hash.
-function M.open_hash(hash, workspace_rc)
+-- Open the View for a task hash. history is optional and only passed when the
+-- View reopens itself, so <BS> still walks back out of the dependencies the user
+-- drilled into before editing.
+function M.open_hash(hash, workspace_rc, history)
   local frontline = require("frontline")
   local cfg = frontline.get_config() or {}
   local view_cfg = vim.tbl_extend("force", default_view_config, cfg.view or {})
@@ -760,7 +802,7 @@ function M.open_hash(hash, workspace_rc)
     hash = hash,
     workspace_rc = workspace_rc,
     origin_win = vim.api.nvim_get_current_win(),
-    history = {},
+    history = history or {},
     ns = vim.api.nvim_create_namespace("frontline_view"),
   }
   state[bufnr] = st
@@ -783,7 +825,7 @@ function M.open_hash(hash, workspace_rc)
     vim.tbl_extend("force", base_opts, {
       title = " Task ",
       title_pos = "left",
-      footer = " q close · a annotate · x toggle · ? keys ",
+      footer = " q close · a annotate · x toggle · e edit · ? keys ",
       footer_pos = "left",
     }),
     vim.tbl_extend("force", base_opts, { title = " Task ", title_pos = "left" }),
