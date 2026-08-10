@@ -172,16 +172,18 @@ function M.get_workspaces()
   return workspaces
 end
 
--- Priority values
-local priorities = {
-  "H",  -- High
-  "M",  -- Medium
-  "L",  -- Low
-}
+-- Get priority suggestions, from the values configured in Taskwarrior.
+-- The empty value ("no priority") is skipped: it is not something to type.
+function M.get_priority_suggestions(workspace_rc)
+  local task_client = require("frontline.task_client")
 
--- Get priority suggestions
-function M.get_priority_suggestions()
-  return priorities
+  local suggestions = {}
+  for _, value in ipairs(task_client.get_priority_values(workspace_rc)) do
+    if value ~= "" then
+      table.insert(suggestions, value)
+    end
+  end
+  return suggestions
 end
 
 -- Parse the current line to determine what kind of completion is needed
@@ -240,8 +242,9 @@ local function parse_completion_context(line, col)
     return "task_id", depends_match, "depends:"
   end
 
-  -- Check for priority
-  local priority_match = string.match(text_before, "priority:([HML]*)$")
+  -- Check for priority. Values are user-configurable, so match any word
+  -- characters rather than only the default H/M/L.
+  local priority_match = string.match(text_before, "priority:(%w*)$")
   if priority_match ~= nil then
     return "priority", priority_match, "priority:"
   end
@@ -349,7 +352,19 @@ function M.complete_task_input(arglead, cmdline, cursorpos)
 
     suggestions = M.get_task_ids(workspace_rc)
   elseif comp_type == "priority" then
-    suggestions = M.get_priority_suggestions()
+    -- First check if there's a workspace in the command line being typed
+    local _, workspace_rc = parse_workspace_from_cmdline(cmdline)
+
+    -- If no workspace in cmdline, fall back to current buffer workspace
+    if not workspace_rc then
+      local frontline = require("frontline")
+      local current_workspace = frontline.get_current_workspace()
+      if current_workspace and frontline.config.workspaces and frontline.config.workspaces[current_workspace] then
+        workspace_rc = frontline.resolve_workspace_rc(frontline.config.workspaces[current_workspace])
+      end
+    end
+
+    suggestions = M.get_priority_suggestions(workspace_rc)
   end
 
   -- Filter suggestions based on what user has typed

@@ -185,18 +185,18 @@ local function get_status_indicator(task)
   end
 end
 
--- Helper to get priority, dependency, and annotation icons
-local function get_extra_icons(task)
+-- Helper to get priority, dependency, and recurrence icons
+-- priority_labels: optional map from a Taskwarrior priority value to the text
+-- shown for it, for users who would rather see a glyph than the bare value
+local function get_extra_icons(task, priority_labels)
   local icons = {}
 
-  -- Priority: 🔴 for High, 🟠 for Medium, 🟡 for Low
-  if task.priority then
-    if task.priority == "H" then
-      table.insert(icons, "🔴")
-    elseif task.priority == "M" then
-      table.insert(icons, "🟠")
-    elseif task.priority == "L" then
-      table.insert(icons, "🟡")
+  -- Priority values are a Taskwarrior UDA the user can redefine, so the value
+  -- itself is shown rather than a fixed icon that would only fit H/M/L
+  if task.priority and task.priority ~= "" then
+    local label = priority_labels and priority_labels[task.priority] or task.priority
+    if label ~= "" then
+      table.insert(icons, label)
     end
   end
 
@@ -208,11 +208,6 @@ local function get_extra_icons(task)
   -- For reverse dependencies, check if this task is blocking others
   if task._reverse_deps and #task._reverse_deps > 0 then
     table.insert(icons, "⚓")
-  end
-
-  -- For annotations, Taskwarrior 'export' includes an 'annotations' field as a table
-  if task.annotations and #task.annotations > 0 then
-    table.insert(icons, "🗒️")
   end
 
   -- Recurring child instances carry a 'recur' field (templates are already filtered out)
@@ -229,7 +224,8 @@ end
 -- Function to format a single Taskwarrior task
 -- convert_to_local: if true, converts UTC to local time using system date command
 -- use_relative: if true, formats due/scheduled dates as relative (e.g. "tomorrow", "2 days")
-function M.format_task(task, convert_to_local, use_relative)
+-- priority_labels: optional map from priority value to the text shown for it
+function M.format_task(task, convert_to_local, use_relative, priority_labels)
   -- Default to true (convert to local time by default)
   if convert_to_local == nil then
     convert_to_local = true
@@ -238,7 +234,7 @@ function M.format_task(task, convert_to_local, use_relative)
   local status = get_status_indicator(task)
   local description = task.description or ""
   local due_date_str = format_due_date(task, convert_to_local, use_relative)
-  local extra_icons_str = get_extra_icons(task)
+  local extra_icons_str = get_extra_icons(task, priority_labels)
   local short_hash = string.sub(task.uuid or "", 1, 8)
 
   -- For completed tasks, append end date in curly brackets after the description

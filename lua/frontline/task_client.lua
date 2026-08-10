@@ -159,9 +159,92 @@ function M.run_command(task_args, workspace_rc)
   return true, stdout
 end
 
+-- Priority is a Taskwarrior UDA, so the set of values and their order is up to
+-- the user: 'uda.priority.values' lists them highest first, and the empty entry
+-- marks where tasks with no priority rank. "H,M,L," is only the default, and
+-- something like "A,B,,C" (where C ranks below no priority at all) is valid.
+local DEFAULT_PRIORITY_VALUES = { "H", "M", "L", "" }
+
+-- Cached per rc file, since each workspace has its own Taskwarrior config
+local priority_values_cache = {}
+
+-- Split a 'uda.priority.values' setting, keeping empty entries: they carry the
+-- rank of tasks with no priority and cannot be dropped.
+function M.parse_priority_values(raw)
+  local values = {}
+  local pos = 1
+  while true do
+    local start_idx, end_idx = string.find(raw, ",", pos, true)
+    if not start_idx then
+      table.insert(values, string.sub(raw, pos))
+      break
+    end
+    table.insert(values, string.sub(raw, pos, start_idx - 1))
+    pos = end_idx + 1
+  end
+
+  -- A list with no real values tells us nothing; let the caller fall back
+  local has_value = false
+  for _, value in ipairs(values) do
+    if value ~= "" then has_value = true end
+  end
+  if not has_value then
+    return nil
+  end
+
+  -- Without an empty entry Taskwarrior has no rank for unset priorities, so
+  -- put them last, which is where the default configuration places them.
+  local has_unset = false
+  for _, value in ipairs(values) do
+    if value == "" then has_unset = true end
+  end
+  if not has_unset then
+    table.insert(values, "")
+  end
+
+  return values
+end
+
+-- Ordered priority values configured in Taskwarrior, highest first.
+-- Falls back to the H/M/L default when the config cannot be read.
+function M.get_priority_values(workspace_rc)
+  local cache_key = workspace_rc or ""
+  if priority_values_cache[cache_key] then
+    return priority_values_cache[cache_key]
+  end
+
+  local cmd
+  if workspace_rc and workspace_rc ~= "" then
+    local escaped_rc = string.gsub(workspace_rc, "'", "'\\''")
+    cmd = string.format("task rc:'%s' _show", escaped_rc)
+  else
+    cmd = "task _show"
+  end
+
+  local values
+  local stdout, exit_code = _run_shell_command(cmd)
+  if exit_code == 0 and stdout then
+    -- '_show' prints one 'name=value' per line
+    local raw = string.match("\n" .. stdout, "\nuda%.priority%.values=([^\n]*)")
+    if raw then
+      values = M.parse_priority_values(vim.trim(raw))
+    end
+  end
+
+  values = values or DEFAULT_PRIORITY_VALUES
+  priority_values_cache[cache_key] = values
+  return values
+end
+
+-- Drop the cached priority values, so a Taskwarrior config change is picked up
+function M.invalidate_priority_values()
+  priority_values_cache = {}
+end
+
 -- Expose for testing purposes
 function M._set_run_shell_command_mock(mock_func)
   _run_shell_command = mock_func
+  M.invalidate_priority_values()
 end
 
 return M

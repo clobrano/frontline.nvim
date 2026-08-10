@@ -131,8 +131,6 @@ local function display_width(str)
   return #str
 end
 
-local priority_icons = { H = "🔴", M = "🟠", L = "🟡" }
-
 -- Format a date as "<icon> <absolute> (<relative>)", omitting the relative part
 -- when it cannot be computed.
 local function format_date_value(iso_date, icon, convert_to_local)
@@ -246,9 +244,10 @@ function M.render(data, opts)
 
   -- Attributes, all on one line and each present only when set
   local attrs = {}
-  if task.priority and priority_icons[task.priority] then
+  if task.priority and task.priority ~= "" then
+    local labels = opts.priority_labels or {}
     table.insert(attrs, {
-      text = string.format("%s %s", priority_icons[task.priority], task.priority),
+      text = labels[task.priority] or task.priority,
       hl = "FrontlineViewPriority",
     })
   end
@@ -522,6 +521,7 @@ local function set_buffer_content(bufnr, st)
   local cfg = frontline.get_config() or {}
   local opts = vim.tbl_extend("force", cfg.view or {}, {
     convert_dates_to_local = cfg.convert_dates_to_local,
+    priority_labels = cfg.priority_labels,
   })
 
   local data, err = M.collect(st.hash, st.workspace_rc, cfg.enable_reverse_dependencies)

@@ -27,6 +27,11 @@ local config = {
                        -- Relative paths are resolved inside notes_directory. Overridden by per-workspace note_template.
                        -- The `task:` frontmatter linking the note to Taskwarrior is always added by frontline.
   copy_task_format = "{{description}}",
+  -- Text shown for each Taskwarrior priority value. Priority values are a UDA
+  -- the user can redefine, so by default the value itself is displayed (e.g.
+  -- "H", or "A" for uda.priority.values=A,B,C). Map any value to a symbol of
+  -- the same width to show that instead, e.g. { H = "↑", M = "-", L = "↓" }.
+  priority_labels = {},
   default_sort = { field = "urgency", reverse = false }, -- Default sort for all views (field: urgency|priority|due|scheduled|project)
   -- Task View window. Sizes are a fraction of the screen when <= 1 and
   -- absolute columns/rows otherwise; the window is sized to its content
@@ -204,13 +209,33 @@ local function refresh_tasks()
     -- Determine sort config: per-view sort overrides config default
     local sort_cfg = query_info.sort or config.default_sort or { field = "urgency", reverse = false }
 
+    -- Rank of each priority value, lowest number first. Built from Taskwarrior's
+    -- own configuration rather than a hardcoded H/M/L, so renamed values sort
+    -- correctly and "no priority" lands wherever the user placed it (the empty
+    -- entry of uda.priority.values). Resolved on first use so views that do not
+    -- sort by priority never query the config.
+    local priority_rank
+    local function get_priority_rank()
+      if not priority_rank then
+        priority_rank = {}
+        for index, value in ipairs(task_client.get_priority_values(workspace_rc)) do
+          if priority_rank[value] == nil then
+            priority_rank[value] = index
+          end
+        end
+      end
+      return priority_rank
+    end
+
     -- Comparator for a single sort field
     local function compare_by_field(a, b, field)
       if field == "urgency" then
         return (a.urgency or 0) > (b.urgency or 0)
       elseif field == "priority" then
-        local prio = { H = 3, M = 2, L = 1 }
-        return (prio[a.priority] or 0) > (prio[b.priority] or 0)
+        local rank = get_priority_rank()
+        -- Values no longer in the configuration rank with "no priority"
+        local unset = rank[""] or math.huge
+        return (rank[a.priority or ""] or unset) < (rank[b.priority or ""] or unset)
       elseif field == "project" then
         return (a.project or "") < (b.project or "")
       elseif field == "due" then
@@ -250,7 +275,8 @@ local function refresh_tasks()
 
     local formatted_tasks = {}
     for _, task in ipairs(tasks) do
-      table.insert(formatted_tasks, renderer.format_task(task, config.convert_dates_to_local, config.relative_dates))
+      table.insert(formatted_tasks, renderer.format_task(task, config.convert_dates_to_local,
+        config.relative_dates, config.priority_labels))
     end
 
     -- Add configured number of newlines after tasks
