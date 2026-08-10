@@ -7,7 +7,7 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 - 📝 Embed Taskwarrior queries in Markdown headers
 - 🔄 Automatic task list updates on file open/save
 - ✅ Task status indicators: `[ ]` pending, `[S]` started, `[x]` completed, `[-]` deleted
-- 🎯 Priority, dependency, and reverse dependency icons
+- 🎯 Priority, dependency, and reverse dependency markers
 - ⚙️ Configurable blank lines after task lists
 - ⌨️ Interactive task management with keybindings
 - 🔎 Compact task View with annotations, dependencies and inline TODO toggling
@@ -77,7 +77,7 @@ Tasks within each view are sorted by urgency by default. You can change the defa
 | Field | Description |
 |-------|-------------|
 | `urgency` | Taskwarrior urgency score (default) |
-| `priority` | Priority level (H > M > L) |
+| `priority` | Priority, ordered as configured in Taskwarrior (`uda.priority.values`) |
 | `due` | Due date (earliest first) |
 | `scheduled` | Scheduled date (earliest first) |
 | `completed` / `end` | Completion date |
@@ -151,7 +151,7 @@ Tasks are displayed as Markdown list items:
 
 Examples:
 ```markdown
-* [ ] Fix authentication bug (2025-11-15 10:00) [2025-11-20 17:00] [!!!,🔒] (abcd1234)
+* [ ] Fix authentication bug (2025-11-15 10:00) [2025-11-20 17:00] [H🔒] (abcd1234)
 * [ ] Simple task (abcd1234)
 * [ ] Task with due date only [2025-11-20 17:00] (abcd1234)
 ```
@@ -161,8 +161,33 @@ Where:
 - `description`: Task description from Taskwarrior
 - `(scheduled)`: Scheduled date in rounded parenthesis (if set)
 - `[due]`: Due date in squared brackets (if set)
-- `[icons]`: Priority (🔴 high, 🟠 medium, 🟡 low), Dependencies (🔒), Reverse Dependencies (⚓)
+- `[icons]`: Priority (the configured value, e.g. `H`), Dependencies (🔒), Reverse Dependencies (⚓)
 - `(hash)`: Short task UUID (first 8 characters)
+
+### Priority Display
+
+Priority is a Taskwarrior UDA, so the set of values and their order is whatever
+`uda.priority.values` says. Frontline therefore displays the value itself rather
+than mapping it to a fixed icon, and it stays correct if you redefine the values:
+
+```
+uda.priority.values=H,M,L,     ->  * [ ] Fix the parser [H🔒] `a1b2c3d4`
+uda.priority.values=A,B,,C     ->  * [ ] Fix the parser [A🔒] `a1b2c3d4`
+```
+
+The empty entry marks where tasks with **no** priority rank. In `A,B,,C` above,
+`C` sorts *below* a task with no priority at all; `sort:priority` honours this.
+
+To show something other than the raw value, map it in `priority_labels`. Pick
+glyphs of the same width so task lines stay aligned:
+
+```lua
+require('frontline').setup({
+  priority_labels = { H = "↑", M = "-", L = "↓" },
+})
+```
+
+Values without an entry keep showing as-is.
 
 ### Automatic Refresh
 
@@ -208,7 +233,7 @@ under the cursor:
 ```
 ╭─ Task ──────────────────────────────────────────────────────╮
 │[S] Refactor the annotation shortcuts             `a2f1c3d8` │
-│🔴 H · frontline.nvim · +nvim +ux · urgency 12.4             │
+│H · frontline.nvim · +nvim +ux · urgency 12.4                │
 │⏱️ 2026-07-31 (tomorrow) · ⏰ 2026-08-02 (+3 days)            │
 │                                                             │
 │Annotations (3)                                              │
@@ -258,7 +283,7 @@ own config can restyle any one of them. All are defined as links with
 |-------|----------|------------|
 | `FrontlineViewDescription` | `Title` | The task description on the title line |
 | `FrontlineViewHash` | `Comment` | Short hashes, on the title and dependency lines |
-| `FrontlineViewPriority` | `Statement` | The priority icon and letter |
+| `FrontlineViewPriority` | `Statement` | The priority value |
 | `FrontlineViewProject` | `Directory` | The project name |
 | `FrontlineViewTags` | `Special` | The `+tag` list |
 | `FrontlineViewRecur` | `Special` | The recurrence period |
@@ -318,7 +343,7 @@ The plugin provides intelligent autocomplete when creating tasks (`<leader>tn`) 
 - **Tags** (`+`): Suggests existing tags (excluding virtual tags like PENDING, COMPLETED)
 - **Dates** (`due:`, `scheduled:`): Suggests common date shortcuts (today, tomorrow, eow, 1w, etc.)
 - **Workspaces** (`@`): Suggests configured workspaces
-- **Priority** (`priority:`): Suggests H (High), M (Medium), L (Low)
+- **Priority** (`priority:`): Suggests the values configured in Taskwarrior (H, M, L by default)
 
 **How to Use Autocomplete:**
 1. Press `<leader>tn` to create a new task (opens command-line mode with `:FrontlineCreateTask`)
@@ -449,6 +474,7 @@ require('frontline').setup({
 | `reverse_dependencies_warn_threshold` | number | 1000 | Warn if reverse dependency queries take longer than this (in milliseconds). Set to 0 to disable warnings. |
 | `default_sort` | table | `{ field = "urgency", reverse = false }` | Default sort for all views. `field` can be `urgency`, `priority`, `due`, `scheduled`, `completed`, or `project`. Set `reverse = true` to flip the order. |
 | `copy_task_format` | string | `"{{description}}"` | Template for the `<leader>tc` copy-to-clipboard action. See [Copy Task Format](#copy-task-format) below. |
+| `priority_labels` | table | `{}` | Text shown for each priority value. Empty means the value itself is displayed. See [Priority Display](#priority-display) below. |
 | `notes_directory` | string | `nil` | Directory where task notes are created (nil = current working directory). Overridden per workspace. |
 | `note_template` | string | `nil` | Markdown file used as the note template (nil = built-in template). See [Task Notes](#task-notes) below. |
 | `view.min_width` | number | 0.5 | Narrowest the task View gets |
@@ -509,7 +535,7 @@ Available placeholders:
 | `{{short_uuid}}` | First 8 chars of UUID | `abcdef12` |
 | `{{status}}` | Task status | `pending` |
 | `{{project}}` | Project name | `work` |
-| `{{priority}}` | Priority level | `H`, `M`, or `L` |
+| `{{priority}}` | Priority value | `H`, `M`, or `L` by default |
 | `{{tags}}` | Space-separated tags | `urgent backend` |
 | `{{due}}` | Due date | `2025-12-25 10:30` |
 | `{{scheduled}}` | Scheduled date | `2025-12-20` |

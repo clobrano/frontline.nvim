@@ -192,7 +192,7 @@ describe("Renderer Module", function()
         assert.are.same(expected, renderer.format_task(task))
       end)
     
-      it("should include high priority icon (🔴)", function()
+      it("should show the priority value", function()
         local task = {
           id = 5,
           description = "High Priority Task",
@@ -200,23 +200,23 @@ describe("Renderer Module", function()
           priority = "H",
           uuid = "defdefdefdefdefd",
         }
-        local expected = "* [ ] High Priority Task [🔴] `defdefde`"
+        local expected = "* [ ] High Priority Task [H] `defdefde`"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
-      it("should include medium priority icon (🟠)", function()
+      it("should show a custom priority value as configured in Taskwarrior", function()
         local task = {
           id = 51,
-          description = "Medium Priority Task",
+          description = "Custom Priority Task",
           status = "pending",
-          priority = "M",
+          priority = "A",
           uuid = "medmedmedmedmed1",
         }
-        local expected = "* [ ] Medium Priority Task [🟠] `medmedme`"
+        local expected = "* [ ] Custom Priority Task [A] `medmedme`"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
-      it("should include low priority icon (🟡)", function()
+      it("should show the configured label instead of the value when mapped", function()
         local task = {
           id = 52,
           description = "Low Priority Task",
@@ -224,7 +224,19 @@ describe("Renderer Module", function()
           priority = "L",
           uuid = "lowlowlowlowlow1",
         }
-        local expected = "* [ ] Low Priority Task [🟡] `lowlowlo`"
+        local expected = "* [ ] Low Priority Task [↓] `lowlowlo`"
+        assert.are.same(expected, renderer.format_task(task, nil, nil, { H = "↑", M = "-", L = "↓" }))
+      end)
+
+      it("should ignore an empty priority", function()
+        local task = {
+          id = 53,
+          description = "Unset Priority Task",
+          status = "pending",
+          priority = "",
+          uuid = "unsetunsetunset1",
+        }
+        local expected = "* [ ] Unset Priority Task `unsetuns`"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -263,7 +275,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "9999aaaabbbbcccc",
         }
-        local expected = "* [ ] All Icons Task [⏰" .. convert_iso_to_local("20251111T090000Z") .. "] [🟠🔒] `9999aaaa`"
+        local expected = "* [ ] All Icons Task [⏰" .. convert_iso_to_local("20251111T090000Z") .. "] [M🔒] `9999aaaa`"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -279,7 +291,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "completecomplete",
         }
-        local expected = "* [ ] Complete Task (⏱️" .. convert_iso_to_local("20251110T080000Z") .. ") [⏰" .. convert_iso_to_local("20251111T090000Z") .. "] [🔴🔒] `complete`"
+        local expected = "* [ ] Complete Task (⏱️" .. convert_iso_to_local("20251110T080000Z") .. ") [⏰" .. convert_iso_to_local("20251111T090000Z") .. "] [H🔒] `complete`"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -378,7 +390,7 @@ describe("Renderer Module", function()
             recur = "monthly"
           }
           -- Order: priority, lock, anchor, recurring
-          local expected = "* [ ] Complete icon task [🔴🔒⚓🔁] `allicons`"
+          local expected = "* [ ] Complete icon task [H🔒⚓🔁] `allicons`"
           assert.are.same(expected, renderer.format_task(task))
         end)
 
@@ -390,7 +402,7 @@ describe("Renderer Module", function()
             priority = "M",
             _reverse_deps = {{uuid = "rev1"}}
           }
-          local expected = "* [ ] Blocking task with priority [🟠⚓] `blocking`"
+          local expected = "* [ ] Blocking task with priority [M⚓] `blocking`"
           assert.are.same(expected, renderer.format_task(task))
         end)
 

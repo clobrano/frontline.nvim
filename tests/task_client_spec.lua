@@ -155,4 +155,70 @@ describe("Task Client Module", function()
       assert.are.same("Match", reverse_deps[1].description)
     end)
   end)
+
+  describe("priority values", function()
+    -- Every mock swap invalidates the cache, so tests do not leak into each other
+    local function mock_show(output, exit_code)
+      task_client._set_run_shell_command_mock(function(cmd)
+        assert.truthy(string.find(cmd, "_show", 1, true))
+        return output, exit_code or 0
+      end)
+    end
+
+    it("parses the default value list, unset last", function()
+      assert.are.same({ "H", "M", "L", "" }, task_client.parse_priority_values("H,M,L,"))
+    end)
+
+    it("keeps the position of unset priorities in the middle of the list", function()
+      -- "C" ranks below a task with no priority at all
+      assert.are.same({ "A", "B", "", "C" }, task_client.parse_priority_values("A,B,,C"))
+    end)
+
+    it("appends the unset rank when the list does not declare one", function()
+      assert.are.same({ "A", "B", "C", "" }, task_client.parse_priority_values("A,B,C"))
+    end)
+
+    it("rejects a list with no real values", function()
+      assert.is_nil(task_client.parse_priority_values(""))
+      assert.is_nil(task_client.parse_priority_values(",,"))
+    end)
+
+    it("reads the configured values from taskwarrior", function()
+      mock_show("uda.priority.name=Priority\nuda.priority.values=A,B,,C\nverbose=yes\n")
+      assert.are.same({ "A", "B", "", "C" }, task_client.get_priority_values())
+    end)
+
+    it("reads the setting when it is the first line of output", function()
+      mock_show("uda.priority.values=A,B\n")
+      assert.are.same({ "A", "B", "" }, task_client.get_priority_values())
+    end)
+
+    it("falls back to H/M/L when the setting is missing", function()
+      mock_show("verbose=yes\n")
+      assert.are.same({ "H", "M", "L", "" }, task_client.get_priority_values())
+    end)
+
+    it("falls back to H/M/L when the command fails", function()
+      mock_show("task: command not found", 1)
+      assert.are.same({ "H", "M", "L", "" }, task_client.get_priority_values())
+    end)
+
+    it("caches per workspace rc file", function()
+      local calls = 0
+      task_client._set_run_shell_command_mock(function(cmd)
+        calls = calls + 1
+        if string.find(cmd, "work.taskrc", 1, true) then
+          return "uda.priority.values=A,B,\n", 0
+        end
+        return "uda.priority.values=H,M,L,\n", 0
+      end)
+
+      assert.are.same({ "H", "M", "L", "" }, task_client.get_priority_values())
+      assert.are.same({ "A", "B", "" }, task_client.get_priority_values("/tmp/work.taskrc"))
+      -- Repeat lookups are served from the cache
+      task_client.get_priority_values()
+      task_client.get_priority_values("/tmp/work.taskrc")
+      assert.are.same(2, calls)
+    end)
+  end)
 end)
