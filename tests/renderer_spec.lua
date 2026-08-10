@@ -240,7 +240,7 @@ describe("Renderer Module", function()
         assert.are.same(expected, renderer.format_task(task))
       end)
     
-      it("should include annotation icon if present", function()
+      it("should not show any icon for annotations", function()
         local task = {
           id = 7,
           description = "Annotated Task",
@@ -248,7 +248,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Some note"}},
           uuid = "5555666677778888",
         }
-        local expected = "* [ ] Annotated Task [🗒️] `55556666`"
+        local expected = "* [ ] Annotated Task `55556666`"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -263,7 +263,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "9999aaaabbbbcccc",
         }
-        local expected = "* [ ] All Icons Task [⏰" .. convert_iso_to_local("20251111T090000Z") .. "] [🟠🔒🗒️] `9999aaaa`"
+        local expected = "* [ ] All Icons Task [⏰" .. convert_iso_to_local("20251111T090000Z") .. "] [🟠🔒] `9999aaaa`"
         assert.are.same(expected, renderer.format_task(task))
       end)
 
@@ -279,7 +279,7 @@ describe("Renderer Module", function()
           annotations = {{description = "Another note"}},
           uuid = "completecomplete",
         }
-        local expected = "* [ ] Complete Task (⏱️" .. convert_iso_to_local("20251110T080000Z") .. ") [⏰" .. convert_iso_to_local("20251111T090000Z") .. "] [🔴🔒🗒️] `complete`"
+        local expected = "* [ ] Complete Task (⏱️" .. convert_iso_to_local("20251110T080000Z") .. ") [⏰" .. convert_iso_to_local("20251111T090000Z") .. "] [🔴🔒] `complete`"
         assert.are.same(expected, renderer.format_task(task))
       end)
     
@@ -377,8 +377,8 @@ describe("Renderer Module", function()
             annotations = {{description = "note"}},
             recur = "monthly"
           }
-          -- Order: priority, lock, anchor, annotations, recurring
-          local expected = "* [ ] Complete icon task [🔴🔒⚓🗒️🔁] `allicons`"
+          -- Order: priority, lock, anchor, recurring
+          local expected = "* [ ] Complete icon task [🔴🔒⚓🔁] `allicons`"
           assert.are.same(expected, renderer.format_task(task))
         end)
 

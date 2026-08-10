@@ -7,7 +7,7 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 - 📝 Embed Taskwarrior queries in Markdown headers
 - 🔄 Automatic task list updates on file open/save
 - ✅ Task status indicators: `[ ]` pending, `[S]` started, `[x]` completed, `[-]` deleted
-- 🎯 Priority, dependency, reverse dependency, and annotation icons
+- 🎯 Priority, dependency, and reverse dependency icons
 - ⚙️ Configurable blank lines after task lists
 - ⌨️ Interactive task management with keybindings
 - 🔎 Compact task View with annotations, dependencies and inline TODO toggling
@@ -161,7 +161,7 @@ Where:
 - `description`: Task description from Taskwarrior
 - `(scheduled)`: Scheduled date in rounded parenthesis (if set)
 - `[due]`: Due date in squared brackets (if set)
-- `[icons]`: Priority (🔴 high, 🟠 medium, 🟡 low), Dependencies (🔒), Reverse Dependencies (⚓), Annotations (🗒️)
+- `[icons]`: Priority (🔴 high, 🟠 medium, 🟡 low), Dependencies (🔒), Reverse Dependencies (⚓)
 - `(hash)`: Short task UUID (first 8 characters)
 
 ### Automatic Refresh

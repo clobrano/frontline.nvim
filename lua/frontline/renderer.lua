@@ -185,7 +185,7 @@ local function get_status_indicator(task)
   end
 end
 
--- Helper to get priority, dependency, and annotation icons
+-- Helper to get priority, dependency, and recurrence icons
 local function get_extra_icons(task)
   local icons = {}
 
@@ -208,11 +208,6 @@ local function get_extra_icons(task)
   -- For reverse dependencies, check if this task is blocking others
   if task._reverse_deps and #task._reverse_deps > 0 then
     table.insert(icons, "⚓")
-  end
-
-  -- For annotations, Taskwarrior 'export' includes an 'annotations' field as a table
-  if task.annotations and #task.annotations > 0 then
-    table.insert(icons, "🗒️")
   end
 
   -- Recurring child instances carry a 'recur' field (templates are already filtered out)
