@@ -423,8 +423,43 @@ local function short(uuid)
   return string.sub(uuid or "", 1, 8)
 end
 
+-- Look up several tasks by UUID in one Taskwarrior call, keyed by UUID.
+--
+-- The UUIDs have to reach Taskwarrior as separate lexemes: it folds bare
+-- IDs/UUIDs in a filter into a single "any of these" expression, but it only
+-- builds comma-separated sets out of numeric IDs. A comma-joined list of UUIDs
+-- therefore lexes as one plain word and degrades into a description search that
+-- matches nothing, leaving every dependency unresolved.
+local function fetch_by_uuid(uuids, workspace_rc)
+  local by_uuid = {}
+  if #uuids == 0 then
+    return by_uuid
+  end
+
+  local tasks = task_client.execute_query(table.concat(uuids, " "), workspace_rc) or {}
+  for _, task in ipairs(tasks) do
+    if task.uuid then
+      by_uuid[task.uuid] = task
+    end
+  end
+
+  -- Resolving the descriptions is the whole point of the section, so a UUID the
+  -- batch missed is worth one more lookup on its own.
+  for _, uuid in ipairs(uuids) do
+    if not by_uuid[uuid] then
+      local single = task_client.execute_query(uuid, workspace_rc)
+      if single and single[1] then
+        by_uuid[uuid] = single[1]
+      end
+    end
+  end
+
+  return by_uuid
+end
+
 -- Fetch a task plus the descriptions of its forward and reverse dependencies.
--- Costs at most three Taskwarrior invocations regardless of dependency count.
+-- Costs three Taskwarrior invocations, plus one per dependency the batched
+-- lookup could not resolve.
 function M.collect(hash, workspace_rc, enable_reverse_dependencies)
   local tasks, err = task_client.execute_query(hash, workspace_rc)
   if err then
@@ -438,11 +473,7 @@ function M.collect(hash, workspace_rc, enable_reverse_dependencies)
   local forward_deps = {}
 
   if task.depends and #task.depends > 0 then
-    local dep_tasks = task_client.execute_query(table.concat(task.depends, ","), workspace_rc) or {}
-    local by_uuid = {}
-    for _, dep_task in ipairs(dep_tasks) do
-      by_uuid[dep_task.uuid] = dep_task
-    end
+    local by_uuid = fetch_by_uuid(task.depends, workspace_rc)
     for _, dep_uuid in ipairs(task.depends) do
       local dep_task = by_uuid[dep_uuid]
       table.insert(forward_deps, {

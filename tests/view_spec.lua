@@ -377,3 +377,130 @@ describe("view.render", function()
     assert.is_truthy(lines[1]:match("`a2f1c3d8`$"))
   end)
 end)
+
+describe("view.collect", function()
+  local task_client = require("frontline.task_client")
+  local original_run_shell_command
+
+  -- Stand in for Taskwarrior: only a filter made of whitespace-separated UUIDs
+  -- resolves to tasks, which is how Taskwarrior itself behaves.
+  local function mock_taskwarrior(tasks_by_uuid, commands)
+    task_client._set_run_shell_command_mock(function(cmd)
+      table.insert(commands, cmd)
+      local filter = cmd:match("^task '(.*)' export$")
+      local matched = {}
+      for term in (filter or ""):gmatch("%S+") do
+        if tasks_by_uuid[term] then
+          table.insert(matched, tasks_by_uuid[term])
+        end
+      end
+      return vim.fn.json_encode(matched), 0
+    end)
+  end
+
+  before_each(function()
+    original_run_shell_command = task_client._run_shell_command
+  end)
+
+  after_each(function()
+    task_client._set_run_shell_command_mock(original_run_shell_command)
+  end)
+
+  it("resolves the descriptions of every blocking task", function()
+    local commands = {}
+    mock_taskwarrior({
+      ["aaaaaaaa-0000-0000-0000-000000000001"] = {
+        uuid = "aaaaaaaa-0000-0000-0000-000000000001",
+        description = "the parent",
+        status = "pending",
+        depends = {
+          "bbbbbbbb-0000-0000-0000-000000000002",
+          "cccccccc-0000-0000-0000-000000000003",
+        },
+      },
+      ["bbbbbbbb-0000-0000-0000-000000000002"] = {
+        uuid = "bbbbbbbb-0000-0000-0000-000000000002",
+        description = "first blocker",
+        status = "pending",
+      },
+      ["cccccccc-0000-0000-0000-000000000003"] = {
+        uuid = "cccccccc-0000-0000-0000-000000000003",
+        description = "second blocker",
+        status = "completed",
+      },
+    }, commands)
+
+    local data, err = view.collect("aaaaaaaa-0000-0000-0000-000000000001", nil, false)
+
+    assert.is_nil(err)
+    assert.are.equal(2, #data.forward_deps)
+    assert.are.equal("first blocker", data.forward_deps[1].description)
+    assert.are.equal("pending", data.forward_deps[1].status)
+    assert.are.equal("second blocker", data.forward_deps[2].description)
+    assert.are.equal("completed", data.forward_deps[2].status)
+
+    -- One call for the task, one for all of its dependencies
+    assert.are.equal(2, #commands)
+  end)
+
+  it("falls back to a single lookup for dependencies the batch missed", function()
+    local commands = {}
+    local tasks = {
+      ["aaaaaaaa-0000-0000-0000-000000000001"] = {
+        uuid = "aaaaaaaa-0000-0000-0000-000000000001",
+        description = "the parent",
+        status = "pending",
+        depends = {
+          "bbbbbbbb-0000-0000-0000-000000000002",
+          "cccccccc-0000-0000-0000-000000000003",
+        },
+      },
+      ["bbbbbbbb-0000-0000-0000-000000000002"] = {
+        uuid = "bbbbbbbb-0000-0000-0000-000000000002",
+        description = "first blocker",
+        status = "pending",
+      },
+      ["cccccccc-0000-0000-0000-000000000003"] = {
+        uuid = "cccccccc-0000-0000-0000-000000000003",
+        description = "second blocker",
+        status = "pending",
+      },
+    }
+
+    task_client._set_run_shell_command_mock(function(cmd)
+      table.insert(commands, cmd)
+      local filter = cmd:match("^task '(.*)' export$") or ""
+      -- Resolve single-UUID filters only, as if the batch had come back short
+      local matched = {}
+      if tasks[filter] then
+        table.insert(matched, tasks[filter])
+      end
+      return vim.fn.json_encode(matched), 0
+    end)
+
+    local data, err = view.collect("aaaaaaaa-0000-0000-0000-000000000001", nil, false)
+
+    assert.is_nil(err)
+    assert.are.equal(2, #data.forward_deps)
+    assert.are.equal("first blocker", data.forward_deps[1].description)
+    assert.are.equal("second blocker", data.forward_deps[2].description)
+  end)
+
+  it("marks a dependency that cannot be found at all", function()
+    local commands = {}
+    mock_taskwarrior({
+      ["aaaaaaaa-0000-0000-0000-000000000001"] = {
+        uuid = "aaaaaaaa-0000-0000-0000-000000000001",
+        description = "the parent",
+        status = "pending",
+        depends = { "dddddddd-0000-0000-0000-000000000004" },
+      },
+    }, commands)
+
+    local data = view.collect("aaaaaaaa-0000-0000-0000-000000000001", nil, false)
+
+    assert.are.equal(1, #data.forward_deps)
+    assert.are.equal("Unknown task", data.forward_deps[1].description)
+    assert.are.equal("dddddddd", data.forward_deps[1].short_hash)
+  end)
+end)
