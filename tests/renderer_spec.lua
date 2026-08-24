@@ -459,14 +459,14 @@ describe("Renderer Module", function()
           end
         end
 
-        it("should show 'today' plus the time for a due date that is today", function()
+        it("should show the time for a due date that is today", function()
           local task = {
             description = "Due Today",
             status = "pending",
             due = iso_date_offset(0), -- local noon
             uuid = "reltoday00000001",
           }
-          local expected = "* [ ] Due Today [⏰today 12pm] `reltoday`"
+          local expected = "* [ ] Due Today [⏰12pm] `reltoday`"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -656,7 +656,7 @@ describe("Renderer Module", function()
             due = iso_today_at(14, 0),
             uuid = "todaypm000000001",
           }
-          local expected = "* [ ] Afternoon Meeting [⏰today 2pm] `todaypm0`"
+          local expected = "* [ ] Afternoon Meeting [⏰2pm] `todaypm0`"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -667,7 +667,7 @@ describe("Renderer Module", function()
             due = iso_today_at(10, 0),
             uuid = "todayam000000001",
           }
-          local expected = "* [ ] Standup [⏰today 10am] `todayam0`"
+          local expected = "* [ ] Standup [⏰10am] `todayam0`"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -678,7 +678,7 @@ describe("Renderer Module", function()
             due = iso_today_at(11, 35),
             uuid = "todaymin00000001",
           }
-          local expected = "* [ ] Odd Time [⏰today 11:35am] `todaymin`"
+          local expected = "* [ ] Odd Time [⏰11:35am] `todaymin`"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -689,7 +689,7 @@ describe("Renderer Module", function()
             due = iso_today_at(12, 0),
             uuid = "todaynoon0000001",
           }
-          assert.are.same("* [ ] Noon [⏰today 12pm] `todaynoo`", renderer.format_task(noon, true, true))
+          assert.are.same("* [ ] Noon [⏰12pm] `todaynoo`", renderer.format_task(noon, true, true))
 
           local past_midnight = {
             description = "Past Midnight",
@@ -697,10 +697,10 @@ describe("Renderer Module", function()
             due = iso_today_at(0, 30),
             uuid = "todaymidn0000001",
           }
-          assert.are.same("* [ ] Past Midnight [⏰today 12:30am] `todaymid`", renderer.format_task(past_midnight, true, true))
+          assert.are.same("* [ ] Past Midnight [⏰12:30am] `todaymid`", renderer.format_task(past_midnight, true, true))
         end)
 
-        it("should omit the time for a whole-day event at midnight", function()
+        it("should keep saying 'today' for a whole-day event at midnight", function()
           local task = {
             description = "Whole Day",
             status = "pending",
@@ -718,7 +718,7 @@ describe("Renderer Module", function()
             scheduled = iso_today_at(15, 0),
             uuid = "todaysche0000001",
           }
-          local expected = "* [ ] Scheduled Today (⏱️today 3pm) `todaysch`"
+          local expected = "* [ ] Scheduled Today (⏱️3pm) `todaysch`"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
@@ -730,11 +730,11 @@ describe("Renderer Module", function()
             due = iso_today_at(17, 45),
             uuid = "todayboth0000001",
           }
-          local expected = "* [ ] Busy Day (⏱️today 9am) [⏰today 5:45pm] `todaybot`"
+          local expected = "* [ ] Busy Day (⏱️9am) [⏰5:45pm] `todaybot`"
           assert.are.same(expected, renderer.format_task(task, true, true))
         end)
 
-        it("should not add the time to dates other than today", function()
+        it("should keep the relative form for dates other than today", function()
           local task = {
             description = "Due Tomorrow",
             status = "pending",
@@ -763,7 +763,7 @@ describe("Renderer Module", function()
             ["end"] = iso_today_at(15, 20),
             uuid = "todayend00000001",
           }
-          local expected = "* [x] Done Today {✅today 3:20pm} `todayend`"
+          local expected = "* [x] Done Today {✅3:20pm} `todayend`"
           assert.are.same(expected, renderer.format_task(task, true, true))
 
           local absolute = "* [x] Done Today {✅" .. today_date() .. " 15:20} `todayend`"

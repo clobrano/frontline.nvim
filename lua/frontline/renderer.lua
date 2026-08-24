@@ -177,9 +177,9 @@ end
 
 -- Helper to format a due/scheduled date for a task list line.
 -- "today" on its own hides the hour of something happening in a few hours, so
--- dates falling today carry their local time ("today 2pm"). Whole-day events
--- (midnight) keep the day alone, and the absolute format already shows the
--- time it has.
+-- a date falling today shows its local time instead ("2pm"). Whole-day events
+-- (midnight) have no time to show and keep saying "today", and the absolute
+-- format already shows the time it has.
 local function format_list_date(iso_date, convert_to_local, use_relative)
   if use_relative then
     local parts = local_date_parts(iso_date)
@@ -187,10 +187,7 @@ local function format_list_date(iso_date, convert_to_local, use_relative)
     local relative = relative_from_diff(diff_days)
     if relative then
       local time_str = diff_days == 0 and format_time_from_parts(parts)
-      if time_str then
-        return string.format("%s %s", relative, time_str)
-      end
-      return relative
+      return time_str or relative
     end
   end
 
@@ -216,7 +213,7 @@ local function format_due_date(task, convert_to_local, use_relative)
 end
 
 -- Helper to format end date for completed tasks (date only, except for tasks
--- completed today, where the time of day is what tells them apart)
+-- completed today, which show the time of day that tells them apart)
 local function format_end_date(task, convert_to_local, use_relative)
   local iso_date = task["end"]
   if not iso_date then
@@ -231,10 +228,7 @@ local function format_end_date(task, convert_to_local, use_relative)
     local date_str = relative_from_diff(diff_days)
     if date_str then
       local time_str = is_today and format_time_from_parts(parts)
-      if time_str then
-        return string.format("%s %s", date_str, time_str)
-      end
-      return date_str
+      return time_str or date_str
     end
   end
 
