@@ -10,7 +10,8 @@ local completion = require("frontline.completion")
 local config = {
   newlines_after_tasks = 2,
   convert_dates_to_local = true, -- Convert UTC timestamps to local time using system date command (default: true)
-  relative_dates = false, -- Display due/scheduled dates in relative format (e.g. "tomorrow", "2 days", "-1 week")
+  relative_dates = false, -- Display due/scheduled dates in relative format (e.g. "tomorrow", "2 days", "-1 week").
+                          -- Dates falling today also carry their time (e.g. "today 2pm"), unless they are whole-day events.
   workspaces = {
     -- Example configuration (string shorthand):
     -- personal = "~/.config/taskwarrior/personal/.taskrc",

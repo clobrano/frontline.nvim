@@ -164,6 +164,33 @@ Where:
 - `[icons]`: Priority (the configured value, e.g. `H`), Dependencies (🔒), Reverse Dependencies (⚓)
 - `(hash)`: Short task UUID (first 8 characters)
 
+### Date Display
+
+Dates are converted from Taskwarrior's UTC timestamps to your local timezone,
+and a whole-day date (midnight) is shown as a bare day, without a time:
+
+```markdown
+* [ ] Fix authentication bug (2025-11-15 10:00) [2025-11-20 17:00] `abcd1234`
+* [ ] Whole-day deadline [2025-11-20] `abcd1234`
+```
+
+Set `relative_dates = true` to show due, scheduled and completion dates as
+`today`, `tomorrow`, `+3 days`, `2 weeks ago` and so on. In that format the day
+alone says nothing about something happening in a few hours, so a date falling
+**today** also carries its time:
+
+```markdown
+* [ ] Dentist [⏰today 2pm] `abcd1234`
+* [ ] Standup (⏱️today 10am) `abcd1234`
+* [ ] Odd time [⏰today 11:35am] `abcd1234`
+* [ ] Whole-day deadline [⏰today] `abcd1234`
+* [ ] Not until tomorrow [⏰tomorrow] `abcd1234`
+```
+
+Only today's dates get the time, and a whole-day (midnight) event keeps showing
+`today` on its own. Completed tasks follow the same rule: a task finished today
+keeps the time of its `✅` end date, while older ones show the day only.
+
 ### Priority Display
 
 Priority is a Taskwarrior UDA, so the set of values and their order is whatever
@@ -468,6 +495,8 @@ require('frontline').setup({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `newlines_after_tasks` | number | 2 | Number of blank lines to add after each task list |
+| `convert_dates_to_local` | boolean | true | Convert Taskwarrior's UTC timestamps to the local timezone |
+| `relative_dates` | boolean | false | Show due/scheduled/end dates as `today 2pm`, `tomorrow`, `+3 days`, `2 weeks ago`. See [Date Display](#date-display) above. |
 | `workspaces` | table | `{}` | Map of workspace names to Taskwarrior rc file paths |
 | `default_workspace` | string | `nil` | Default workspace name (nil uses system taskwarrior) |
 | `enable_reverse_dependencies` | boolean | true | Enable reverse dependency tracking (⚓ icon and "tasks this task is blocking" view) |

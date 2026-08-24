@@ -63,26 +63,39 @@ local function parse_iso_date(iso_date, convert_to_local)
   return date_str
 end
 
--- Helper to compute the number of whole days between today and an ISO 8601 UTC
--- date, both taken at local midnight. Negative for past dates, nil on failure.
-local function date_diff_days(iso_date)
+-- Helper to resolve an ISO 8601 UTC date (YYYYMMDDTHHmmssZ) to its local
+-- calendar parts. Uses the system 'date' command so timezone and DST are
+-- handled, and returns nil when it is unavailable or the date is unparseable.
+local function local_date_parts(iso_date)
   if not iso_date then return nil end
 
   -- Reformat from YYYYMMDDTHHmmssZ to YYYY-MM-DDTHH:MM:SSZ
   local formatted = string.gsub(iso_date, "(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)Z", "%1-%2-%3T%4:%5:%6Z")
 
-  -- Get the task's local date (year, month, day)
-  local cmd = string.format("date -d '%s' '+%%Y %%m %%d' 2>/dev/null", formatted)
+  local cmd = string.format("date -d '%s' '+%%Y %%m %%d %%H %%M' 2>/dev/null", formatted)
   local result = vim.fn.system(cmd)
   if vim.v.shell_error ~= 0 then return nil end
 
-  result = vim.trim(result)
-  local year, month, day = result:match("^(%d+) (%d+) (%d+)$")
+  local year, month, day, hour, minute = vim.trim(result):match("^(%d+) (%d+) (%d+) (%d+) (%d+)$")
   if not year then return nil end
+
+  return {
+    year = tonumber(year),
+    month = tonumber(month),
+    day = tonumber(day),
+    hour = tonumber(hour),
+    min = tonumber(minute),
+  }
+end
+
+-- Helper to compute the number of whole days between today and a resolved
+-- local date, both taken at local midnight. Negative for past dates.
+local function diff_days_from_parts(parts)
+  if not parts then return nil end
 
   -- Task date at midnight local time
   local task_ts = os.time({
-    year = tonumber(year), month = tonumber(month), day = tonumber(day),
+    year = parts.year, month = parts.month, day = parts.day,
     hour = 0, min = 0, sec = 0,
   })
 
@@ -96,11 +109,35 @@ local function date_diff_days(iso_date)
   return math.floor((task_ts - today_ts) / 86400)
 end
 
--- Helper to compute a relative date string from an ISO 8601 UTC date
+-- Helper to compute the number of whole days between today and an ISO 8601 UTC
+-- date, both taken at local midnight. Negative for past dates, nil on failure.
+local function date_diff_days(iso_date)
+  return diff_days_from_parts(local_date_parts(iso_date))
+end
+
+-- Helper to format a resolved local time of day as a compact 12-hour string:
+-- "2pm", "10am", "11:35am". Returns nil at midnight, which is what Taskwarrior
+-- stores for a whole-day event, so those keep showing the day alone.
+local function format_time_from_parts(parts)
+  if not parts then return nil end
+
+  local hour, minute = parts.hour, parts.min
+  if hour == 0 and minute == 0 then return nil end
+
+  local suffix = hour < 12 and "am" or "pm"
+  local hour12 = hour % 12
+  if hour12 == 0 then hour12 = 12 end
+
+  if minute == 0 then
+    return string.format("%d%s", hour12, suffix)
+  end
+  return string.format("%d:%02d%s", hour12, minute, suffix)
+end
+
+-- Helper to turn a day difference into a relative string
 -- Returns strings like "today", "tomorrow", "yesterday", "2 days", "3 weeks",
 -- "1 month", or "-2 days", "-3 weeks", "-1 month" for past dates
-local function format_relative_date(iso_date)
-  local diff_days = date_diff_days(iso_date)
+local function relative_from_diff(diff_days)
   if not diff_days then return nil end
 
   if diff_days == 0 then
@@ -133,12 +170,37 @@ local function format_relative_date(iso_date)
   end
 end
 
+-- Helper to compute a relative date string from an ISO 8601 UTC date
+local function format_relative_date(iso_date)
+  return relative_from_diff(date_diff_days(iso_date))
+end
+
+-- Helper to format a due/scheduled date for a task list line.
+-- "today" on its own hides the hour of something happening in a few hours, so
+-- dates falling today carry their local time ("today 2pm"). Whole-day events
+-- (midnight) keep the day alone, and the absolute format already shows the
+-- time it has.
+local function format_list_date(iso_date, convert_to_local, use_relative)
+  if use_relative then
+    local parts = local_date_parts(iso_date)
+    local diff_days = diff_days_from_parts(parts)
+    local relative = relative_from_diff(diff_days)
+    if relative then
+      local time_str = diff_days == 0 and format_time_from_parts(parts)
+      if time_str then
+        return string.format("%s %s", relative, time_str)
+      end
+      return relative
+    end
+  end
+
+  return parse_iso_date(iso_date, convert_to_local)
+end
+
 -- Helper to format scheduled date (rounded parenthesis)
 local function format_scheduled_date(task, convert_to_local, use_relative)
   if task.scheduled then
-    local date_str = use_relative
-      and (format_relative_date(task.scheduled) or parse_iso_date(task.scheduled, convert_to_local))
-      or parse_iso_date(task.scheduled, convert_to_local)
+    local date_str = format_list_date(task.scheduled, convert_to_local, use_relative)
     return string.format("(⏱️%s)", date_str)
   end
   return ""
@@ -147,29 +209,42 @@ end
 -- Helper to format due date (squared brackets)
 local function format_due_date(task, convert_to_local, use_relative)
   if task.due then
-    local date_str = use_relative
-      and (format_relative_date(task.due) or parse_iso_date(task.due, convert_to_local))
-      or parse_iso_date(task.due, convert_to_local)
+    local date_str = format_list_date(task.due, convert_to_local, use_relative)
     return string.format("[⏰%s]", date_str)
   end
   return ""
 end
 
--- Helper to format end date for completed tasks (date only, no time)
+-- Helper to format end date for completed tasks (date only, except for tasks
+-- completed today, where the time of day is what tells them apart)
 local function format_end_date(task, convert_to_local, use_relative)
-  if task["end"] then
-    local date_str
-    if use_relative then
-      date_str = format_relative_date(task["end"])
+  local iso_date = task["end"]
+  if not iso_date then
+    return ""
+  end
+
+  local parts = local_date_parts(iso_date)
+  local diff_days = diff_days_from_parts(parts)
+  local is_today = diff_days == 0
+
+  if use_relative then
+    local date_str = relative_from_diff(diff_days)
+    if date_str then
+      local time_str = is_today and format_time_from_parts(parts)
+      if time_str then
+        return string.format("%s %s", date_str, time_str)
+      end
+      return date_str
     end
-    if not date_str then
-      date_str = parse_iso_date(task["end"], convert_to_local)
-      -- Strip time portion, keep only the date (YYYY-MM-DD)
-      date_str = string.match(date_str, "^(%d%d%d%d%-%d%d%-%d%d)") or date_str
-    end
+  end
+
+  local date_str = parse_iso_date(iso_date, convert_to_local)
+  if is_today then
+    -- parse_iso_date has already dropped the time for a midnight value
     return date_str
   end
-  return ""
+  -- Strip time portion, keep only the date (YYYY-MM-DD)
+  return string.match(date_str, "^(%d%d%d%d%-%d%d%-%d%d)") or date_str
 end
 
 -- Helper to get status indicator
