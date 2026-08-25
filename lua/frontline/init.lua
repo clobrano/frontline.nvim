@@ -12,6 +12,7 @@ local config = {
   convert_dates_to_local = true, -- Convert UTC timestamps to local time using system date command (default: true)
   relative_dates = false, -- Display due/scheduled dates in relative format (e.g. "tomorrow", "2 days", "-1 week").
                           -- A date falling today shows its time instead (e.g. "2pm"), unless it is a whole-day event.
+                          -- The end date of a completed task always shows the ISO day.
   workspaces = {
     -- Example configuration (string shorthand):
     -- personal = "~/.config/taskwarrior/personal/.taskrc",

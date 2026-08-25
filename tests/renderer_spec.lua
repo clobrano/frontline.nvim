@@ -595,7 +595,7 @@ describe("Renderer Module", function()
           assert.is_nil(result:find("weeks"))
         end)
 
-        it("should apply relative format to end date of completed tasks", function()
+        it("should keep the end date of completed tasks absolute even in relative format", function()
           local task = {
             description = "Completed Task",
             status = "completed",
@@ -603,7 +603,7 @@ describe("Renderer Module", function()
             ["end"] = iso_date_offset(-5),
           }
           local result = renderer.format_task(task, true, true)
-          local expected = "* [x] Completed Task {✅" .. expected_relative(-5) .. "} `relcompl`"
+          local expected = "* [x] Completed Task {✅" .. convert_iso_to_local_date_only(iso_date_offset(-5)) .. "} `relcompl`"
           assert.are.same(expected, result)
         end)
 
@@ -756,18 +756,16 @@ describe("Renderer Module", function()
           assert.are.same(expected, renderer.format_task(task, true, false))
         end)
 
-        it("should keep the time on the end date of a task completed today", function()
+        it("should show the ISO day, not a time, on the end date of a task completed today", function()
           local task = {
             description = "Done Today",
             status = "completed",
             ["end"] = iso_today_at(15, 20),
             uuid = "todayend00000001",
           }
-          local expected = "* [x] Done Today {✅3:20pm} `todayend`"
+          local expected = "* [x] Done Today {✅" .. today_date() .. "} `todayend`"
           assert.are.same(expected, renderer.format_task(task, true, true))
-
-          local absolute = "* [x] Done Today {✅" .. today_date() .. " 15:20} `todayend`"
-          assert.are.same(absolute, renderer.format_task(task, true, false))
+          assert.are.same(expected, renderer.format_task(task, true, false))
         end)
 
         it("should keep the end date bare for a task completed on an earlier day", function()
@@ -777,8 +775,8 @@ describe("Renderer Module", function()
             ["end"] = iso_days_ago(2, 15, 20),
             uuid = "earlyend00000001",
           }
-          local result = renderer.format_task(task, true, false)
-          assert.is_true(result:find("{✅%d%d%d%d%-%d%d%-%d%d}") ~= nil)
+          assert.is_true(renderer.format_task(task, true, false):find("{✅%d%d%d%d%-%d%d%-%d%d}") ~= nil)
+          assert.is_true(renderer.format_task(task, true, true):find("{✅%d%d%d%d%-%d%d%-%d%d}") ~= nil)
         end)
       end)
 

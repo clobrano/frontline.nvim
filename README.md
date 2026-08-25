@@ -174,9 +174,9 @@ and a whole-day date (midnight) is shown as a bare day, without a time:
 * [ ] Whole-day deadline [2025-11-20] `abcd1234`
 ```
 
-Set `relative_dates = true` to show due, scheduled and completion dates as
-`today`, `tomorrow`, `+3 days`, `2 weeks ago` and so on. In that format the day
-alone says nothing about something happening in a few hours, so a date falling
+Set `relative_dates = true` to show due and scheduled dates as `today`,
+`tomorrow`, `+3 days`, `2 weeks ago` and so on. In that format the day alone
+says nothing about something happening in a few hours, so a date falling
 **today** shows its time instead:
 
 ```markdown
@@ -188,9 +188,15 @@ alone says nothing about something happening in a few hours, so a date falling
 ```
 
 A time on its own always means today. A whole-day (midnight) event has no time
-to show and keeps saying `today`. Completed tasks follow the same rule: a task
-finished today shows the time of its `✅` end date, while older ones show the
-day only.
+to show and keeps saying `today`.
+
+The `✅` end date of a completed task is the exception: it is a fact to look up
+rather than something to plan around, so it always shows the ISO day, in either
+format:
+
+```markdown
+* [x] Shipped it {✅2026-08-24} `abcd1234`
+```
 
 ### Priority Display
 
@@ -497,7 +503,7 @@ require('frontline').setup({
 |--------|------|---------|-------------|
 | `newlines_after_tasks` | number | 2 | Number of blank lines to add after each task list |
 | `convert_dates_to_local` | boolean | true | Convert Taskwarrior's UTC timestamps to the local timezone |
-| `relative_dates` | boolean | false | Show due/scheduled/end dates as `tomorrow`, `+3 days`, `2 weeks ago`, and today's dates as their time (`2pm`). See [Date Display](#date-display) above. |
+| `relative_dates` | boolean | false | Show due/scheduled dates as `tomorrow`, `+3 days`, `2 weeks ago`, and today's dates as their time (`2pm`). See [Date Display](#date-display) above. |
 | `workspaces` | table | `{}` | Map of workspace names to Taskwarrior rc file paths |
 | `default_workspace` | string | `nil` | Default workspace name (nil uses system taskwarrior) |
 | `enable_reverse_dependencies` | boolean | true | Enable reverse dependency tracking (⚓ icon and "tasks this task is blocking" view) |

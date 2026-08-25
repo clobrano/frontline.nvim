@@ -212,31 +212,16 @@ local function format_due_date(task, convert_to_local, use_relative)
   return ""
 end
 
--- Helper to format end date for completed tasks (date only, except for tasks
--- completed today, which show the time of day that tells them apart)
-local function format_end_date(task, convert_to_local, use_relative)
+-- Helper to format end date for completed tasks. Unlike due and scheduled,
+-- completion is a fact to look up rather than something to plan around, so it
+-- always shows the ISO day: never a relative form, never a time.
+local function format_end_date(task, convert_to_local)
   local iso_date = task["end"]
   if not iso_date then
     return ""
   end
 
-  local parts = local_date_parts(iso_date)
-  local diff_days = diff_days_from_parts(parts)
-  local is_today = diff_days == 0
-
-  if use_relative then
-    local date_str = relative_from_diff(diff_days)
-    if date_str then
-      local time_str = is_today and format_time_from_parts(parts)
-      return time_str or date_str
-    end
-  end
-
   local date_str = parse_iso_date(iso_date, convert_to_local)
-  if is_today then
-    -- parse_iso_date has already dropped the time for a midnight value
-    return date_str
-  end
   -- Strip time portion, keep only the date (YYYY-MM-DD)
   return string.match(date_str, "^(%d%d%d%d%-%d%d%-%d%d)") or date_str
 end
@@ -292,7 +277,8 @@ end
 
 -- Function to format a single Taskwarrior task
 -- convert_to_local: if true, converts UTC to local time using system date command
--- use_relative: if true, formats due/scheduled dates as relative (e.g. "tomorrow", "2 days")
+-- use_relative: if true, formats due/scheduled dates as relative (e.g. "tomorrow", "2 days"),
+--   and today's dates as their time (e.g. "2pm"); the end date is always an ISO day
 -- priority_labels: optional map from priority value to the text shown for it
 function M.format_task(task, convert_to_local, use_relative, priority_labels)
   -- Default to true (convert to local time by default)
@@ -309,7 +295,7 @@ function M.format_task(task, convert_to_local, use_relative, priority_labels)
   -- For completed tasks, append end date in curly brackets after the description
   -- and skip the scheduled date
   if task.status == "completed" then
-    local end_date_str = format_end_date(task, convert_to_local, use_relative)
+    local end_date_str = format_end_date(task, convert_to_local)
     if end_date_str ~= "" then
       description = string.format("%s {✅%s}", description, end_date_str)
     end
