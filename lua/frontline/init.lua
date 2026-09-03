@@ -29,6 +29,13 @@ local config = {
                        -- Relative paths are resolved inside notes_directory. Overridden by per-workspace note_template.
                        -- The `task:` frontmatter linking the note to Taskwarrior is always added by frontline.
   copy_task_format = "{{description}}",
+  -- Template for each task line in a filter view. The line is built as
+  --   <task_bullet> <status checkbox> <task_format> `<short uuid>`
+  -- The checkbox and the short uuid are always rendered: the checkbox carries
+  -- the task status, and every keybinding finds its task by that uuid.
+  -- See the README (Task Format) for the full list of placeholders.
+  task_format = "{{description}} {{icons}}",
+  task_bullet = "*", -- Markdown list bullet each task line starts with ("-", "+", or "" for none)
   -- Text shown for each Taskwarrior priority value. Priority values are a UDA
   -- the user can redefine, so by default the value itself is displayed (e.g.
   -- "H", or "A" for uda.priority.values=A,B,C). Map any value to a symbol of
@@ -277,8 +284,13 @@ local function refresh_tasks()
 
     local formatted_tasks = {}
     for _, task in ipairs(tasks) do
-      table.insert(formatted_tasks, renderer.format_task(task, config.convert_dates_to_local,
-        config.relative_dates, config.priority_labels))
+      table.insert(formatted_tasks, renderer.format_task(task, {
+        convert_to_local = config.convert_dates_to_local,
+        relative_dates = config.relative_dates,
+        priority_labels = config.priority_labels,
+        format = config.task_format,
+        bullet = config.task_bullet,
+      }))
     end
 
     -- Add configured number of newlines after tasks
@@ -363,6 +375,18 @@ function M.setup(opts)
       "show_annotations wins; annotations are now part of the task View (%s).",
       config.mappings.show_annotations, config.mappings.view_task or "view_task"),
       vim.log.levels.WARN)
+  end
+
+  -- A typo in task_format renders as nothing at all, so name the placeholders
+  -- that will not resolve instead of leaving the user to guess.
+  local format_problems = renderer.validate_task_format(config.task_format)
+  if #format_problems > 0 then
+    local details = {}
+    for _, problem in ipairs(format_problems) do
+      table.insert(details, string.format("{{%s}}: %s", problem.name, problem.reason))
+    end
+    vim.notify(string.format("Frontline: task_format has unusable placeholders. %s",
+      table.concat(details, "; ")), vim.log.levels.WARN)
   end
 
   -- Update the exposed config reference so completion module gets the merged config
