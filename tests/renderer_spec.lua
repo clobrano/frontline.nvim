@@ -313,7 +313,8 @@ describe("Renderer Module", function()
           status = "pending",
           uuid = "2222333344445555",
         }
-        local expected = "* [ ]  `22223333`"
+        -- No stray double space: the gap an empty placeholder leaves is collapsed
+        local expected = "* [ ] `22223333`"
         assert.are.same(expected, renderer.format_task(task))
       end)
 

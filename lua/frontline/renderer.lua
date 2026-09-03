@@ -239,34 +239,49 @@ local function get_status_indicator(task)
   end
 end
 
--- Helper to get priority, dependency, and recurrence icons
+-- Markers shown next to a task. Their placeholder names are part of the
+-- documented task_format vocabulary: blocked, blocking, recurring.
+local ICON_BLOCKED = "🔒"   -- the task depends on tasks that are not done yet
+local ICON_BLOCKING = "⚓"  -- other tasks depend on this one
+local ICON_RECURRING = "🔁" -- the task is an instance of a recurring task
+
+-- Helper to get the text shown for a task's priority.
+-- Priority values are a Taskwarrior UDA the user can redefine, so the value
+-- itself is shown rather than a fixed icon that would only fit H/M/L.
 -- priority_labels: optional map from a Taskwarrior priority value to the text
 -- shown for it, for users who would rather see a glyph than the bare value
+local function format_priority(task, priority_labels)
+  if not task.priority or task.priority == "" then
+    return ""
+  end
+
+  local label = priority_labels and priority_labels[task.priority] or task.priority
+  return label or ""
+end
+
+-- Helper to get the bracketed group of priority, dependency, and recurrence
+-- markers, e.g. "[H🔒⚓]"
 local function get_extra_icons(task, priority_labels)
   local icons = {}
 
-  -- Priority values are a Taskwarrior UDA the user can redefine, so the value
-  -- itself is shown rather than a fixed icon that would only fit H/M/L
-  if task.priority and task.priority ~= "" then
-    local label = priority_labels and priority_labels[task.priority] or task.priority
-    if label ~= "" then
-      table.insert(icons, label)
-    end
+  local priority = format_priority(task, priority_labels)
+  if priority ~= "" then
+    table.insert(icons, priority)
   end
 
   -- For dependencies, Taskwarrior 'export' includes a 'depends' field as a table of UUIDs
   if task.depends and #task.depends > 0 then
-    table.insert(icons, "🔒")
+    table.insert(icons, ICON_BLOCKED)
   end
 
   -- For reverse dependencies, check if this task is blocking others
   if task._reverse_deps and #task._reverse_deps > 0 then
-    table.insert(icons, "⚓")
+    table.insert(icons, ICON_BLOCKING)
   end
 
   -- Recurring child instances carry a 'recur' field (templates are already filtered out)
   if task.recur then
-    table.insert(icons, "🔁")
+    table.insert(icons, ICON_RECURRING)
   end
 
   if #icons > 0 then
@@ -275,53 +290,292 @@ local function get_extra_icons(task, priority_labels)
   return ""
 end
 
+-- Placeholder rendering for the configurable task format
+--------------------------------------------------------------------------------
+-- The task line is built as:
+--
+--   <bullet> <status> <rendered task_format> `<short uuid>`
+--
+-- The bullet is configurable (task_bullet), the status checkbox and the short
+-- uuid are not: the checkbox carries the task status and every keybinding finds
+-- its task by the backticked uuid, so both are always rendered.
+
+local PLACEHOLDER_PATTERN = "{{%s*([%w_]+)%.?([%w_]*)%s*}}"
+
+-- Placeholders the user can put in task_format. Each entry has a `value`
+-- function returning the decorated form and, where the two differ, a `raw`
+-- function returning the undecorated one ({{due}} vs {{due.raw}}).
+-- ctx carries the rendering options: convert_to_local, relative_dates,
+-- priority_labels.
+local PLACEHOLDERS = {}
+
+PLACEHOLDERS.description = {
+  value = function(task)
+    return task.description or ""
+  end,
+}
+
+PLACEHOLDERS.project = {
+  value = function(task)
+    return task.project or ""
+  end,
+}
+
+PLACEHOLDERS.tags = {
+  value = function(task)
+    if not task.tags or #task.tags == 0 then
+      return ""
+    end
+    return "+" .. table.concat(task.tags, " +")
+  end,
+  raw = function(task)
+    if not task.tags or #task.tags == 0 then
+      return ""
+    end
+    return table.concat(task.tags, " ")
+  end,
+}
+
+PLACEHOLDERS.urgency = {
+  value = function(task)
+    return task.urgency and tostring(task.urgency) or ""
+  end,
+}
+
+PLACEHOLDERS.due = {
+  value = function(task, ctx)
+    return format_due_date(task, ctx.convert_to_local, ctx.relative_dates)
+  end,
+  raw = function(task, ctx)
+    if not task.due then
+      return ""
+    end
+    return format_list_date(task.due, ctx.convert_to_local, ctx.relative_dates)
+  end,
+}
+
+PLACEHOLDERS.scheduled = {
+  value = function(task, ctx)
+    return format_scheduled_date(task, ctx.convert_to_local, ctx.relative_dates)
+  end,
+  raw = function(task, ctx)
+    if not task.scheduled then
+      return ""
+    end
+    return format_list_date(task.scheduled, ctx.convert_to_local, ctx.relative_dates)
+  end,
+}
+
+-- Completion is only shown for completed tasks: a deleted task also carries an
+-- 'end' date, but it did not complete.
+PLACEHOLDERS.completed = {
+  value = function(task, ctx)
+    if task.status ~= "completed" then
+      return ""
+    end
+    local date_str = format_end_date(task, ctx.convert_to_local)
+    if date_str == "" then
+      return ""
+    end
+    return string.format("{✅%s}", date_str)
+  end,
+  raw = function(task, ctx)
+    if task.status ~= "completed" then
+      return ""
+    end
+    return format_end_date(task, ctx.convert_to_local)
+  end,
+}
+
+PLACEHOLDERS.priority = {
+  value = function(task, ctx)
+    return format_priority(task, ctx.priority_labels)
+  end,
+  raw = function(task)
+    return task.priority or ""
+  end,
+}
+
+PLACEHOLDERS.blocked = {
+  value = function(task)
+    if task.depends and #task.depends > 0 then
+      return ICON_BLOCKED
+    end
+    return ""
+  end,
+}
+
+PLACEHOLDERS.blocking = {
+  value = function(task)
+    if task._reverse_deps and #task._reverse_deps > 0 then
+      return ICON_BLOCKING
+    end
+    return ""
+  end,
+}
+
+PLACEHOLDERS.recurring = {
+  value = function(task)
+    if task.recur then
+      return ICON_RECURRING
+    end
+    return ""
+  end,
+}
+
+-- The bracketed group of markers: [<priority><blocked><blocking><recurring>]
+PLACEHOLDERS.markers = {
+  value = function(task, ctx)
+    return get_extra_icons(task, ctx.priority_labels)
+  end,
+}
+
+-- Everything the default format shows besides the description: the completion
+-- date, the scheduled and due dates, and the marker group. Scheduled is left
+-- out for completed tasks, where what was planned no longer matters.
+PLACEHOLDERS.icons = {
+  value = function(task, ctx)
+    local parts = {}
+
+    local function add(str)
+      if str and str ~= "" then
+        table.insert(parts, str)
+      end
+    end
+
+    add(PLACEHOLDERS.completed.value(task, ctx))
+    if task.status ~= "completed" then
+      add(PLACEHOLDERS.scheduled.value(task, ctx))
+    end
+    add(PLACEHOLDERS.due.value(task, ctx))
+    add(PLACEHOLDERS.markers.value(task, ctx))
+
+    return table.concat(parts, " ")
+  end,
+}
+
+-- 'end' is Taskwarrior's own name for the completion date, kept as an alias
+PLACEHOLDERS["end"] = PLACEHOLDERS.completed
+
+-- Placeholders that are part of the line but not of the format string. Naming
+-- one is a mistake worth explaining rather than silently dropping.
+local FIXED_PLACEHOLDERS = {
+  uid = "the short uuid is always appended at the end of the line",
+  uuid = "the short uuid is always appended at the end of the line",
+  short_uuid = "the short uuid is always appended at the end of the line",
+  hash = "the short uuid is always appended at the end of the line",
+  status = "the status checkbox is always rendered before the format",
+  bullet = "the bullet is configured with task_bullet, not in task_format",
+}
+
+M.DEFAULT_TASK_FORMAT = "{{description}} {{icons}}"
+M.DEFAULT_TASK_BULLET = "*"
+
+-- Check a task_format string and return a list of problems, each { name, reason }.
+-- Used by setup() to warn about typos instead of quietly rendering nothing.
+function M.validate_task_format(format)
+  local problems = {}
+
+  if type(format) ~= "string" then
+    table.insert(problems, { name = tostring(format), reason = "task_format must be a string" })
+    return problems
+  end
+
+  for name, suffix in string.gmatch(format, PLACEHOLDER_PATTERN) do
+    local entry = PLACEHOLDERS[name]
+    if not entry then
+      local fixed = FIXED_PLACEHOLDERS[name]
+      table.insert(problems, {
+        name = name,
+        reason = fixed or "unknown placeholder",
+      })
+    elseif suffix ~= "" and suffix ~= "raw" then
+      table.insert(problems, {
+        name = name .. "." .. suffix,
+        reason = string.format("unknown modifier '%s' (only '.raw' is supported)", suffix),
+      })
+    end
+  end
+
+  return problems
+end
+
+-- Render a task_format string for one task. Unknown placeholders render empty,
+-- and the runs of whitespace their absence leaves behind are collapsed so a
+-- task without dates does not trail spaces.
+local function render_task_format(format, task, ctx)
+  local rendered = string.gsub(format, PLACEHOLDER_PATTERN, function(name, suffix)
+    local entry = PLACEHOLDERS[name]
+    if not entry then
+      return ""
+    end
+    -- '.raw' is accepted on every placeholder; on one that has no decoration
+    -- to strip (e.g. {{project}}) it renders the same text.
+    if suffix == "raw" then
+      return (entry.raw or entry.value)(task, ctx) or ""
+    end
+    return entry.value(task, ctx) or ""
+  end)
+
+  rendered = string.gsub(rendered, "  +", " ")
+  return vim.trim(rendered)
+end
+
 -- Function to format a single Taskwarrior task
--- convert_to_local: if true, converts UTC to local time using system date command
--- use_relative: if true, formats due/scheduled dates as relative (e.g. "tomorrow", "2 days"),
---   and today's dates as their time (e.g. "2pm"); the end date is always an ISO day
--- priority_labels: optional map from priority value to the text shown for it
-function M.format_task(task, convert_to_local, use_relative, priority_labels)
+-- opts is a table of rendering options:
+--   convert_to_local: if true, converts UTC to local time using system date command (default true)
+--   relative_dates: if true, formats due/scheduled dates as relative (e.g. "tomorrow", "2 days"),
+--     and today's dates as their time (e.g. "2pm"); the end date is always an ISO day
+--   priority_labels: optional map from priority value to the text shown for it
+--   format: task_format template (default M.DEFAULT_TASK_FORMAT)
+--   bullet: list bullet (default M.DEFAULT_TASK_BULLET)
+-- The legacy positional form format_task(task, convert_to_local, use_relative,
+-- priority_labels) is still accepted.
+function M.format_task(task, opts, use_relative, priority_labels)
+  local ctx
+  if type(opts) == "table" then
+    ctx = {
+      convert_to_local = opts.convert_to_local,
+      relative_dates = opts.relative_dates,
+      priority_labels = opts.priority_labels,
+      format = opts.format,
+      bullet = opts.bullet,
+    }
+  else
+    ctx = {
+      convert_to_local = opts,
+      relative_dates = use_relative,
+      priority_labels = priority_labels,
+    }
+  end
+
   -- Default to true (convert to local time by default)
-  if convert_to_local == nil then
-    convert_to_local = true
+  if ctx.convert_to_local == nil then
+    ctx.convert_to_local = true
   end
 
-  local status = get_status_indicator(task)
-  local description = task.description or ""
-  local due_date_str = format_due_date(task, convert_to_local, use_relative)
-  local extra_icons_str = get_extra_icons(task, priority_labels)
-  local short_hash = string.sub(task.uuid or "", 1, 8)
-
-  -- For completed tasks, append end date in curly brackets after the description
-  -- and skip the scheduled date
-  if task.status == "completed" then
-    local end_date_str = format_end_date(task, convert_to_local)
-    if end_date_str ~= "" then
-      description = string.format("%s {✅%s}", description, end_date_str)
-    end
+  local format = ctx.format
+  if type(format) ~= "string" then
+    format = M.DEFAULT_TASK_FORMAT
   end
 
-  local parts = {"*", status, description}
-
-  -- Add scheduled date first (rounded parenthesis), but not for completed tasks
-  if task.status ~= "completed" then
-    local scheduled_str = format_scheduled_date(task, convert_to_local, use_relative)
-    if scheduled_str ~= "" then
-      table.insert(parts, scheduled_str)
-    end
+  local bullet = ctx.bullet
+  if type(bullet) ~= "string" then
+    bullet = M.DEFAULT_TASK_BULLET
   end
 
-  -- Add due date (squared brackets)
-  if due_date_str ~= "" then
-    table.insert(parts, due_date_str)
+  local parts = {}
+  if bullet ~= "" then
+    table.insert(parts, bullet)
+  end
+  table.insert(parts, get_status_indicator(task))
+
+  local body = render_task_format(format, task, ctx)
+  if body ~= "" then
+    table.insert(parts, body)
   end
 
-  -- Only add icons if they exist
-  if extra_icons_str ~= "" then
-    table.insert(parts, extra_icons_str)
-  end
-
-  table.insert(parts, string.format("`%s`", short_hash))
+  table.insert(parts, string.format("`%s`", string.sub(task.uuid or "", 1, 8)))
 
   return table.concat(parts, " ")
 end

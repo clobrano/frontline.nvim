@@ -15,6 +15,7 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 - 🗂️ Multiple Taskwarrior workspaces support with `@workspace` syntax
 - 🎨 Smart autocomplete for projects, tags, dates, workspaces, and priorities
 - 🔃 Configurable task sorting: global default and per-view `sort:` / `sort.reverse:` directives
+- 🖌️ Configurable task line format, globally or per workspace: pick the placeholders and the bullet you want
 
 ## Installation
 
@@ -117,6 +118,27 @@ require('frontline').setup({
 })
 ```
 
+A workspace can also be given in table form, with its own options — the
+Taskwarrior rc file, where its notes go, and how its task lines are formatted:
+
+```lua
+require('frontline').setup({
+  workspaces = {
+    personal = "~/.config/taskwarrior/personal/.taskrc",
+    work = {
+      rc = "~/.config/taskwarrior/work/.taskrc",
+      notes_directory = "~/notes/work",
+      note_template = "templates/task.md",
+      task_format = "{{description}} {{project}} {{icons}}",
+      task_bullet = "-",
+    },
+  },
+})
+```
+
+Each option falls back to its global value when the workspace does not set it,
+and a workspace given as a plain rc string uses the global values throughout.
+
 **Key Points:**
 - Use `@workspace_name` in your query to specify which workspace to use
 - If no workspace is specified, the `default_workspace` is used
@@ -146,23 +168,149 @@ This allows you to quickly create tasks in different workspaces without switchin
 Tasks are displayed as Markdown list items:
 
 ```markdown
-* [status] description (scheduled) [due] [icons] (hash)
+<bullet> <status> <task_format> `<uid>`
 ```
 
-Examples:
 ```markdown
-* [ ] Fix authentication bug (2025-11-15 10:00) [2025-11-20 17:00] [H🔒] (abcd1234)
-* [ ] Simple task (abcd1234)
-* [ ] Task with due date only [2025-11-20 17:00] (abcd1234)
+* [ ] Fix authentication bug (⏱️2025-11-15 10:00) [⏰2025-11-20 17:00] [H🔒] `abcd1234`
+* [ ] Simple task `abcd1234`
+* [ ] Task with due date only [⏰2025-11-20 17:00] `abcd1234`
+* [x] Shipped it {✅2025-11-18} `abcd1234`
 ```
 
-Where:
-- `[status]`: `[ ]` pending, `[S]` started, `[x]` completed, `[-]` deleted
-- `description`: Task description from Taskwarrior
-- `(scheduled)`: Scheduled date in rounded parenthesis (if set)
-- `[due]`: Due date in squared brackets (if set)
-- `[icons]`: Priority (the configured value, e.g. `H`), Dependencies (🔒), Reverse Dependencies (⚓)
-- `(hash)`: Short task UUID (first 8 characters)
+Three parts of the line are fixed:
+
+- `<status>` — the checkbox carrying the task status: `[ ]` pending, `[S]` started,
+  `[x]` completed, `[-]` deleted.
+- `` `<uid>` `` — the first 8 characters of the task UUID, in backticks. Every
+  keybinding finds its task by this, so it is always appended at the end of the line.
+- The single space separating them from the rest.
+
+Everything in between is the `task_format` template, and the bullet is set with
+`task_bullet`:
+
+```lua
+require('frontline').setup({
+  task_format = "{{description}} {{icons}}",  -- default
+  task_bullet = "*",                          -- default ("-", "+", or "" for no bullet)
+})
+```
+
+Both are **per-workspace** options: set them inside a
+[workspace](#multiple-workspaces) entry and that workspace's views render their
+own way, falling back to the global value above when it sets none.
+
+```lua
+require('frontline').setup({
+  task_format = "{{description}} {{icons}}",  -- used by everything else
+  workspaces = {
+    work = {
+      rc = "~/.config/taskwarrior/work/.taskrc",
+      task_format = "{{description}} {{project}} {{due}}",
+      task_bullet = "-",
+    },
+    personal = "~/.config/taskwarrior/personal/.taskrc",  -- keeps the global format
+  },
+})
+```
+
+```markdown
+# Work | @work status:pending
+- [ ] Fix the login bug backend [⏰2025-12-25] `abcd1234`
+
+# Personal | @personal status:pending
+* [ ] Book the dentist (⏱️2025-12-20) [⏰2025-12-25] [H] `ef567890`
+```
+
+The format is resolved per **view**, from the `@workspace` in its header (or
+`default_workspace` when the header names none), so two views in the same file
+can render differently.
+
+#### Placeholders
+
+Placeholders use the same Jinja-like `{{name}}` syntax as
+[`copy_task_format`](#copy-task-format). A placeholder with nothing to show
+renders as an empty string, and the gap it leaves is collapsed, so a task
+without dates does not trail spaces.
+
+| Placeholder | Renders | Example |
+|-------------|---------|---------|
+| `{{description}}` | Task description | `Fix the login bug` |
+| `{{icons}}` | Everything the default layout shows besides the description: completion, scheduled, due, markers | `{✅2025-12-01} (⏱️2025-12-20) [⏰2025-12-25] [H🔒]` |
+| `{{due}}` | Due date, in squared brackets with ⏰ | `[⏰2025-12-25]` |
+| `{{scheduled}}` | Scheduled date, in rounded parenthesis with ⏱️ | `(⏱️2025-12-20)` |
+| `{{completed}}` | Completion date of a **completed** task, in curly brackets with ✅ (alias: `{{end}}`) | `{✅2025-12-01}` |
+| `{{markers}}` | The bracketed marker group: priority, blocked, blocking, recurring | `[H🔒⚓🔁]` |
+| `{{priority}}` | Priority, as configured in [`priority_labels`](#priority-display) | `H` |
+| `{{blocked}}` | 🔒 when the task depends on tasks that are not done yet | `🔒` |
+| `{{blocking}}` | ⚓ when other tasks depend on this one | `⚓` |
+| `{{recurring}}` | 🔁 when the task is an instance of a recurring task | `🔁` |
+| `{{project}}` | Project name | `work` |
+| `{{tags}}` | Tags, each with a `+` prefix | `+urgent +backend` |
+| `{{urgency}}` | Urgency score | `15.5` |
+
+Add `.raw` to any placeholder to drop its decoration — brackets, icon, or
+prefix — and get the bare value:
+
+| Placeholder | Renders | Example |
+|-------------|---------|---------|
+| `{{due.raw}}` | Due date without `[⏰ ]` | `2025-12-25` |
+| `{{scheduled.raw}}` | Scheduled date without `(⏱️ )` | `2025-12-20` |
+| `{{completed.raw}}` | Completion date without `{✅ }` | `2025-12-01` |
+| `{{priority.raw}}` | Priority value, ignoring `priority_labels` | `H` |
+| `{{tags.raw}}` | Tags without the `+` prefix | `urgent backend` |
+
+`.raw` on a placeholder that has no decoration (`{{description.raw}}`,
+`{{project.raw}}`) renders the same text as without it.
+
+Dates in every placeholder follow `convert_dates_to_local` and `relative_dates`
+— see [Date Display](#date-display) below.
+
+#### Examples
+
+```lua
+-- Default: the full layout
+task_format = "{{description}} {{icons}}"
+-- * [ ] Fix the login bug (⏱️2025-12-20) [⏰2025-12-25] [H🔒] `abcd1234`
+
+-- Description only, for a distraction-free list
+task_format = "{{description}}"
+-- * [ ] Fix the login bug `abcd1234`
+
+-- Only the dates you plan around, no priority or dependency markers
+task_format = "{{description}} {{due}} {{scheduled}}"
+-- * [ ] Fix the login bug [⏰2025-12-25] (⏱️2025-12-20) `abcd1234`
+
+-- Only the due date
+task_format = "{{description}} {{due}}"
+-- * [ ] Fix the login bug [⏰2025-12-25] `abcd1234`
+
+-- Project and tags alongside the usual icons
+task_format = "{{description}} {{project}} {{tags}} {{icons}}"
+-- * [ ] Fix the login bug work +urgent +backend (⏱️2025-12-20) [⏰2025-12-25] [H🔒] `abcd1234`
+
+-- Your own decoration, using the raw values
+task_format = "{{description}} @{{project}} due:{{due.raw}} !{{priority.raw}}"
+-- * [ ] Fix the login bug @work due:2025-12-25 !H `abcd1234`
+
+-- A dash bullet, for vaults that use "- [ ]" checkboxes
+task_bullet = "-"
+-- - [ ] Fix the login bug (⏱️2025-12-20) [⏰2025-12-25] [H🔒] `abcd1234`
+```
+
+#### Notes
+
+- `{{icons}}` is the composition `{{completed}} {{scheduled}} {{due}} {{markers}}`,
+  with the scheduled date left out for completed tasks, where what was planned no
+  longer matters. Listing the placeholders yourself gives you full control of the
+  order; `{{scheduled}}` on its own always renders when the task has one.
+- `{{completed}}` renders for completed tasks only. A deleted task carries an end
+  date too, but it did not complete.
+- `{{status}}`, `{{uid}}` and the bullet are not placeholders: the checkbox and the
+  uid are always rendered, and the bullet is set with `task_bullet`. Naming them
+  in `task_format`, along with any unknown placeholder or modifier, produces a
+  warning at startup (naming the workspace, for a per-workspace format) and
+  renders nothing.
 
 ### Date Display
 
@@ -510,6 +658,8 @@ require('frontline').setup({
 | `reverse_dependencies_warn_threshold` | number | 1000 | Warn if reverse dependency queries take longer than this (in milliseconds). Set to 0 to disable warnings. |
 | `default_sort` | table | `{ field = "urgency", reverse = false }` | Default sort for all views. `field` can be `urgency`, `priority`, `due`, `scheduled`, `completed`, or `project`. Set `reverse = true` to flip the order. |
 | `copy_task_format` | string | `"{{description}}"` | Template for the `<leader>tc` copy-to-clipboard action. See [Copy Task Format](#copy-task-format) below. |
+| `task_format` | string | `"{{description}} {{icons}}"` | Template for each task line in a filter view. Overridable per workspace. See [Task Format](#task-format) above. |
+| `task_bullet` | string | `"*"` | Markdown list bullet each task line starts with (`"-"`, `"+"`, or `""` for none). Overridable per workspace. |
 | `priority_labels` | table | `{}` | Text shown for each priority value. Empty means the value itself is displayed. See [Priority Display](#priority-display) below. |
 | `notes_directory` | string | `nil` | Directory where task notes are created (nil = current working directory). Overridden per workspace. |
 | `note_template` | string | `nil` | Markdown file used as the note template (nil = built-in template). See [Task Notes](#task-notes) below. |
