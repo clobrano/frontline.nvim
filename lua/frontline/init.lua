@@ -20,6 +20,8 @@ local config = {
     -- work = { rc = "~/.config/taskwarrior/work/.taskrc", notes_directory = "~/notes/work" },
     -- Per-workspace note templates are supported too:
     -- work = { rc = "...", notes_directory = "~/notes/work", note_template = "templates/task.md" },
+    -- So is a per-workspace task line format, overriding task_format/task_bullet below:
+    -- work = { rc = "...", task_format = "{{description}} {{project}} {{icons}}", task_bullet = "-" },
   },
   default_workspace = nil, -- Name of the default workspace (uses system taskwarrior if nil)
   enable_reverse_dependencies = true, -- Enable reverse dependency tracking (anchor icon and "tasks this task is blocking" view)
@@ -33,7 +35,8 @@ local config = {
   --   <task_bullet> <status checkbox> <task_format> `<short uuid>`
   -- The checkbox and the short uuid are always rendered: the checkbox carries
   -- the task status, and every keybinding finds its task by that uuid.
-  -- See the README (Task Format) for the full list of placeholders.
+  -- Both are defaults a workspace can override; see the README (Task Format)
+  -- for the full list of placeholders.
   task_format = "{{description}} {{icons}}",
   task_bullet = "*", -- Markdown list bullet each task line starts with ("-", "+", or "" for none)
   -- Text shown for each Taskwarrior priority value. Priority values are a UDA
@@ -92,7 +95,20 @@ local function resolve_workspace_rc(entry)
   return nil
 end
 
--- Helper: extract notes_directory from a workspace entry (table form only)
+-- Helper: read an option for a workspace, falling back to the global value.
+-- Only the table form of a workspace entry can carry options; a workspace given
+-- as a plain rc string has none.
+local function workspace_option(workspace_name, key)
+  if workspace_name then
+    local entry = config.workspaces and config.workspaces[workspace_name]
+    if type(entry) == "table" and entry[key] ~= nil then
+      return entry[key]
+    end
+  end
+
+  return config[key]
+end
+
 -- Helper function to get workspace rc file path
 local function get_workspace_rc(workspace_name)
   if not workspace_name or workspace_name == "" then
@@ -131,6 +147,10 @@ end
 
 -- Expose workspace helpers for other modules
 M.resolve_workspace_rc = resolve_workspace_rc
+
+-- Expose the per-workspace > global lookup, e.g.
+-- get_workspace_option("work", "task_format")
+M.get_workspace_option = workspace_option
 
 -- Expose config for completion module
 M.config = config
@@ -288,8 +308,8 @@ local function refresh_tasks()
         convert_to_local = config.convert_dates_to_local,
         relative_dates = config.relative_dates,
         priority_labels = config.priority_labels,
-        format = config.task_format,
-        bullet = config.task_bullet,
+        format = workspace_option(workspace, "task_format"),
+        bullet = workspace_option(workspace, "task_bullet"),
       }))
     end
 
@@ -378,15 +398,27 @@ function M.setup(opts)
   end
 
   -- A typo in task_format renders as nothing at all, so name the placeholders
-  -- that will not resolve instead of leaving the user to guess.
-  local format_problems = renderer.validate_task_format(config.task_format)
-  if #format_problems > 0 then
+  -- that will not resolve instead of leaving the user to guess. Workspaces can
+  -- carry their own format, so each one is checked too.
+  local function warn_about_format(format, where)
+    local problems = renderer.validate_task_format(format)
+    if #problems == 0 then
+      return
+    end
+
     local details = {}
-    for _, problem in ipairs(format_problems) do
+    for _, problem in ipairs(problems) do
       table.insert(details, string.format("{{%s}}: %s", problem.name, problem.reason))
     end
-    vim.notify(string.format("Frontline: task_format has unusable placeholders. %s",
-      table.concat(details, "; ")), vim.log.levels.WARN)
+    vim.notify(string.format("Frontline: %s has unusable placeholders. %s",
+      where, table.concat(details, "; ")), vim.log.levels.WARN)
+  end
+
+  warn_about_format(config.task_format, "task_format")
+  for name, entry in pairs(config.workspaces or {}) do
+    if type(entry) == "table" and entry.task_format ~= nil then
+      warn_about_format(entry.task_format, string.format("task_format of workspace '%s'", name))
+    end
   end
 
   -- Update the exposed config reference so completion module gets the merged config

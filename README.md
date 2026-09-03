@@ -15,7 +15,7 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 - 🗂️ Multiple Taskwarrior workspaces support with `@workspace` syntax
 - 🎨 Smart autocomplete for projects, tags, dates, workspaces, and priorities
 - 🔃 Configurable task sorting: global default and per-view `sort:` / `sort.reverse:` directives
-- 🖌️ Configurable task line format: pick the placeholders and the bullet you want
+- 🖌️ Configurable task line format, globally or per workspace: pick the placeholders and the bullet you want
 
 ## Installation
 
@@ -118,6 +118,27 @@ require('frontline').setup({
 })
 ```
 
+A workspace can also be given in table form, with its own options — the
+Taskwarrior rc file, where its notes go, and how its task lines are formatted:
+
+```lua
+require('frontline').setup({
+  workspaces = {
+    personal = "~/.config/taskwarrior/personal/.taskrc",
+    work = {
+      rc = "~/.config/taskwarrior/work/.taskrc",
+      notes_directory = "~/notes/work",
+      note_template = "templates/task.md",
+      task_format = "{{description}} {{project}} {{icons}}",
+      task_bullet = "-",
+    },
+  },
+})
+```
+
+Each option falls back to its global value when the workspace does not set it,
+and a workspace given as a plain rc string uses the global values throughout.
+
 **Key Points:**
 - Use `@workspace_name` in your query to specify which workspace to use
 - If no workspace is specified, the `default_workspace` is used
@@ -174,6 +195,36 @@ require('frontline').setup({
   task_bullet = "*",                          -- default ("-", "+", or "" for no bullet)
 })
 ```
+
+Both are **per-workspace** options: set them inside a
+[workspace](#multiple-workspaces) entry and that workspace's views render their
+own way, falling back to the global value above when it sets none.
+
+```lua
+require('frontline').setup({
+  task_format = "{{description}} {{icons}}",  -- used by everything else
+  workspaces = {
+    work = {
+      rc = "~/.config/taskwarrior/work/.taskrc",
+      task_format = "{{description}} {{project}} {{due}}",
+      task_bullet = "-",
+    },
+    personal = "~/.config/taskwarrior/personal/.taskrc",  -- keeps the global format
+  },
+})
+```
+
+```markdown
+# Work | @work status:pending
+- [ ] Fix the login bug backend [⏰2025-12-25] `abcd1234`
+
+# Personal | @personal status:pending
+* [ ] Book the dentist (⏱️2025-12-20) [⏰2025-12-25] [H] `ef567890`
+```
+
+The format is resolved per **view**, from the `@workspace` in its header (or
+`default_workspace` when the header names none), so two views in the same file
+can render differently.
 
 #### Placeholders
 
@@ -258,7 +309,8 @@ task_bullet = "-"
 - `{{status}}`, `{{uid}}` and the bullet are not placeholders: the checkbox and the
   uid are always rendered, and the bullet is set with `task_bullet`. Naming them
   in `task_format`, along with any unknown placeholder or modifier, produces a
-  warning at startup and renders nothing.
+  warning at startup (naming the workspace, for a per-workspace format) and
+  renders nothing.
 
 ### Date Display
 
@@ -606,8 +658,8 @@ require('frontline').setup({
 | `reverse_dependencies_warn_threshold` | number | 1000 | Warn if reverse dependency queries take longer than this (in milliseconds). Set to 0 to disable warnings. |
 | `default_sort` | table | `{ field = "urgency", reverse = false }` | Default sort for all views. `field` can be `urgency`, `priority`, `due`, `scheduled`, `completed`, or `project`. Set `reverse = true` to flip the order. |
 | `copy_task_format` | string | `"{{description}}"` | Template for the `<leader>tc` copy-to-clipboard action. See [Copy Task Format](#copy-task-format) below. |
-| `task_format` | string | `"{{description}} {{icons}}"` | Template for each task line in a filter view. See [Task Format](#task-format) above. |
-| `task_bullet` | string | `"*"` | Markdown list bullet each task line starts with (`"-"`, `"+"`, or `""` for none) |
+| `task_format` | string | `"{{description}} {{icons}}"` | Template for each task line in a filter view. Overridable per workspace. See [Task Format](#task-format) above. |
+| `task_bullet` | string | `"*"` | Markdown list bullet each task line starts with (`"-"`, `"+"`, or `""` for none). Overridable per workspace. |
 | `priority_labels` | table | `{}` | Text shown for each priority value. Empty means the value itself is displayed. See [Priority Display](#priority-display) below. |
 | `notes_directory` | string | `nil` | Directory where task notes are created (nil = current working directory). Overridden per workspace. |
 | `note_template` | string | `nil` | Markdown file used as the note template (nil = built-in template). See [Task Notes](#task-notes) below. |
