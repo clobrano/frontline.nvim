@@ -2008,6 +2008,12 @@ local function collect_resources(texts)
   return resources, source_map
 end
 
+-- The URLs and file paths contained in a single piece of text, URLs first.
+-- Used by the task View to copy an annotation's links.
+function M.resources_in_text(text)
+  return (collect_resources({ text or "" }))
+end
+
 -- Open the URL or file path contained in a single piece of text, prompting when
 -- there is more than one. Returns false when the text contains none.
 -- Used by the task View to act on the annotation under the cursor, which passes

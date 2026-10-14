@@ -520,6 +520,7 @@ local KEYMAP_HELP = {
   { "s", "toggle started" },
   { "e", "edit the task in Taskwarrior's editor" },
   { "<CR>", "open the annotation's URL or file, or drill into a dependency" },
+  { "y", "copy the annotation's URL or file path to the clipboard" },
   { "<BS>", "go back to the previous task" },
   { "?", "show this help" },
 }
@@ -727,6 +728,41 @@ local function activate(bufnr)
   end
 end
 
+-- y: copy the URL or file path of the annotation under the cursor, prompting
+-- when the annotation holds more than one.
+local function yank_resource(bufnr)
+  local st = get_state(bufnr)
+  if not st then
+    return
+  end
+
+  local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  local meta = st.line_meta and st.line_meta[lnum]
+  if not meta or meta.kind ~= "annotation" then
+    vim.notify("No annotation on this line", vim.log.levels.INFO)
+    return
+  end
+
+  local resources = require("frontline.mappings").resources_in_text(meta.description)
+  local function copy(resource)
+    vim.fn.setreg('"', resource)
+    vim.fn.setreg('+', resource)
+    vim.notify(string.format("Copied: %s", resource), vim.log.levels.INFO)
+  end
+
+  if #resources == 0 then
+    vim.notify("No URL or file path in this annotation", vim.log.levels.INFO)
+  elseif #resources == 1 then
+    copy(resources[1])
+  else
+    vim.ui.select(resources, { prompt = "Select link to copy:" }, function(choice)
+      if choice then
+        copy(choice)
+      end
+    end)
+  end
+end
+
 local function go_back(bufnr)
   local st = get_state(bufnr)
   if not st or #st.history == 0 then
@@ -811,6 +847,7 @@ local function setup_keymaps(bufnr)
   map("a", function() annotate(bufnr) end, "Add annotation")
   map("x", function() toggle_annotation(bufnr) end, "Toggle TODO/DONE annotation")
   map("<CR>", function() activate(bufnr) end, "Open annotation resource or dependency")
+  map("y", function() yank_resource(bufnr) end, "Copy annotation URL or file path")
   map("<BS>", function() go_back(bufnr) end, "Back to previous task")
   map("d", function() toggle_task(bufnr, "toggle_done") end, "Toggle task done")
   map("s", function() toggle_task(bufnr, "toggle_started") end, "Toggle task started")
