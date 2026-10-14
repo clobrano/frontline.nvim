@@ -496,6 +496,7 @@ Inside the View:
 | `s` | Toggle started |
 | `e` | Edit the task in Taskwarrior's interactive editor, the same one `<leader>te` opens |
 | `<CR>` | On an annotation: open its URL or file path. On a dependency: open that task's View |
+| `y` | On an annotation: copy its URL or file path to the clipboard (`+`) and unnamed register, prompting when there is more than one |
 | `<BS>` | Go back to the previous task after drilling into a dependency |
 | `?` | Show these keys |
 
