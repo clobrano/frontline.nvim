@@ -31,6 +31,12 @@ local config = {
                        -- Relative paths are resolved inside notes_directory. Overridden by per-workspace note_template.
                        -- The `task:` frontmatter linking the note to Taskwarrior is always added by frontline.
   copy_task_format = "{{description}}",
+  -- User-defined actions run on the task under the cursor. Each entry is
+  --   { key = "<leader>tca", cmd = "wl-copy", input = "{{description}} {{tags}}", desc = "..." }
+  -- `cmd` runs through 'shell'; placeholders in it are shell-escaped. `input`
+  -- (optional) is rendered like copy_task_format and written to cmd's stdin.
+  -- See the README (Custom Actions).
+  custom_actions = {},
   -- Template for each task line in a filter view. The line is built as
   --   <task_bullet> <status checkbox> <task_format> `<short uuid>`
   -- The checkbox and the short uuid are always rendered: the checkbox carries
@@ -385,6 +391,20 @@ function M.setup(opts)
   -- Merge user config with defaults
   config = vim.tbl_deep_extend("force", config, opts)
 
+  -- custom_actions is a list: deep-merging it would mix entries by index with
+  -- those of an earlier setup() call, so the user's list replaces it as a whole.
+  -- Invalid entries are reported and dropped instead of failing at keypress.
+  local actions = {}
+  for i, action in ipairs(opts.custom_actions or {}) do
+    local problem = mappings.validate_custom_action(action)
+    if problem then
+      vim.notify(string.format("Frontline: custom_actions[%d] %s; ignoring it.", i, problem), vim.log.levels.WARN)
+    else
+      table.insert(actions, action)
+    end
+  end
+  config.custom_actions = actions
+
   -- <leader>ta now adds an annotation instead of listing them. Warn users whose
   -- config still binds show_annotations to the same key, where their explicit
   -- binding silently shadows add_annotation.
@@ -547,6 +567,12 @@ function M.setup(opts)
       if config.mappings.add_todo_annotation then
         vim.keymap.set("n", config.mappings.add_todo_annotation, mappings.add_todo_annotation,
           vim.tbl_extend("force", opts_mapping, { desc = "Add TODO annotation to task" }))
+      end
+
+      -- User-defined custom actions
+      for _, action in ipairs(config.custom_actions or {}) do
+        vim.keymap.set("n", action.key, function() mappings.run_custom_action(action) end,
+          vim.tbl_extend("force", opts_mapping, { desc = action.desc or ("Frontline: " .. action.cmd) }))
       end
     end,
     group = vim.api.nvim_create_augroup("FrontlineMappings", { clear = true }),
