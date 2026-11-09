@@ -1018,11 +1018,12 @@ local function render_copy_template(format_str, task)
   return vim.trim(result)
 end
 
--- Copy task description and short UUID to clipboard
-function M.copy_task()
+-- Export the task under the cursor. Returns the decoded task table, or nil
+-- after notifying the user when there is no task or it cannot be read.
+local function get_task_under_cursor()
   local hash = M.get_task_hash_under_cursor()
   if not hash then
-    return
+    return nil
   end
 
   -- Get current workspace for proper task operations
@@ -1036,17 +1037,26 @@ function M.copy_task()
 
   if exit_code ~= 0 then
     vim.notify("Failed to get task information", vim.log.levels.ERROR)
-    return
+    return nil
   end
 
   -- Parse JSON
   local success, tasks = pcall(vim.fn.json_decode, task_json)
   if not success or not tasks or #tasks == 0 then
     vim.notify("Failed to parse task data", vim.log.levels.ERROR)
+    return nil
+  end
+
+  return tasks[1]
+end
+
+-- Copy the task under the cursor to the clipboard, formatted by copy_task_format
+function M.copy_task()
+  local task = get_task_under_cursor()
+  if not task then
     return
   end
 
-  local task = tasks[1]
   local format_str = config.copy_task_format or "{{description}}"
   local text_to_copy = render_copy_template(format_str, task)
 
@@ -1054,6 +1064,99 @@ function M.copy_task()
   vim.fn.setreg('+', text_to_copy)
 
   vim.notify(string.format("Copied: %s", text_to_copy), vim.log.levels.INFO)
+end
+
+-- Render a custom action's shell command. Every placeholder value is
+-- shell-escaped, so task text (quotes, $, backticks, ...) can never be
+-- interpreted by the shell. Placeholders must therefore not be quoted in the
+-- command: write `notify-send {{description}}`, not `notify-send "{{description}}"`.
+local function render_action_command(cmd_template, task)
+  local replacements = template_replacements(task)
+
+  local result = cmd_template:gsub("{{%s*([%w_]+)%s*}}", function(key)
+    return vim.fn.shellescape(replacements[key] or "")
+  end)
+
+  return result
+end
+
+-- Check a custom action from the config. Returns nil when it is usable, or a
+-- message describing what is wrong with it.
+function M.validate_custom_action(action)
+  if type(action) ~= "table" then
+    return "must be a table"
+  end
+  if type(action.key) ~= "string" or action.key == "" then
+    return "needs a `key` string"
+  end
+  if type(action.cmd) ~= "string" or action.cmd == "" then
+    return "needs a `cmd` string"
+  end
+  if action.input ~= nil and type(action.input) ~= "string" then
+    return "`input` must be a string"
+  end
+  return nil
+end
+
+-- Build what a custom action runs for a task: the shell command, and the text
+-- written to its stdin (nil when the action has no `input`).
+function M.build_custom_action(action, task)
+  local command = render_action_command(action.cmd, task)
+  local input = action.input and render_copy_template(action.input, task) or nil
+  return command, input
+end
+
+local function action_label(action)
+  return action.desc or action.cmd
+end
+
+-- Join a job's output chunks into trimmed text.
+local function job_output(chunks)
+  return vim.trim(table.concat(chunks or {}, "\n"))
+end
+
+-- Run a user-defined custom action on the task under the cursor.
+-- The command runs asynchronously through 'shell', so long-running or forking
+-- programs (wl-copy, xclip, notify-send, ...) never block the editor.
+function M.run_custom_action(action)
+  local task = get_task_under_cursor()
+  if not task then
+    return
+  end
+
+  local command, input = M.build_custom_action(action, task)
+  local label = action_label(action)
+  local stdout, stderr = {}, {}
+
+  local job_id = vim.fn.jobstart(command, {
+    stdout_buffered = true,
+    stderr_buffered = true,
+    on_stdout = function(_, data) stdout = data end,
+    on_stderr = function(_, data) stderr = data end,
+    on_exit = function(_, code)
+      vim.schedule(function()
+        if code ~= 0 then
+          local err = job_output(stderr)
+          vim.notify(string.format("%s failed (exit %d)%s", label, code, err ~= "" and (": " .. err) or ""),
+            vim.log.levels.ERROR)
+        elseif action.notify ~= false then
+          local out = job_output(stdout)
+          vim.notify(out ~= "" and string.format("%s: %s", label, out) or string.format("%s: done", label),
+            vim.log.levels.INFO)
+        end
+      end)
+    end,
+  })
+
+  if job_id <= 0 then
+    vim.notify(string.format("%s: could not start command: %s", label, command), vim.log.levels.ERROR)
+    return
+  end
+
+  if input then
+    vim.fn.chansend(job_id, input)
+  end
+  vim.fn.chanclose(job_id, "stdin")
 end
 
 -- Edit task in Taskwarrior's interactive editor.
@@ -2090,6 +2193,7 @@ function M.open_url()
 end
 
 M._render_copy_template = render_copy_template
+M._render_action_command = render_action_command
 M._render_note_template = render_note_template
 M._ensure_task_metadata = ensure_task_metadata
 

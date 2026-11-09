@@ -659,6 +659,7 @@ require('frontline').setup({
 | `reverse_dependencies_warn_threshold` | number | 1000 | Warn if reverse dependency queries take longer than this (in milliseconds). Set to 0 to disable warnings. |
 | `default_sort` | table | `{ field = "urgency", reverse = false }` | Default sort for all views. `field` can be `urgency`, `priority`, `due`, `scheduled`, `completed`, or `project`. Set `reverse = true` to flip the order. |
 | `copy_task_format` | string | `"{{description}}"` | Template for the `<leader>tc` copy-to-clipboard action. See [Copy Task Format](#copy-task-format) below. |
+| `custom_actions` | table | `{}` | Your own mappings that run a shell command on the task under the cursor. See [Custom Actions](#custom-actions) below. |
 | `task_format` | string | `"{{description}} {{icons}}"` | Template for each task line in a filter view. Overridable per workspace. See [Task Format](#task-format) above. |
 | `task_bullet` | string | `"*"` | Markdown list bullet each task line starts with (`"-"`, `"+"`, or `""` for none). Overridable per workspace. |
 | `priority_labels` | table | `{}` | Text shown for each priority value. Empty means the value itself is displayed. See [Priority Display](#priority-display) below. |
@@ -729,6 +730,53 @@ Available placeholders:
 | `{{urgency}}` | Urgency score | `15.5` |
 
 Empty placeholders are replaced with an empty string and trailing whitespace is trimmed.
+
+### Custom Actions
+
+`custom_actions` adds your own mappings that run a shell command on the task under
+the cursor. Use them for anything `<leader>tc` doesn't cover: another clipboard
+tool, a second copy format, a notification, a script of your own.
+
+```lua
+require('frontline').setup({
+  custom_actions = {
+    -- Copy "description tags" with wl-copy
+    { key = "<leader>tca", desc = "Copy with tags", cmd = "wl-copy", input = "{{description}} {{tags}}" },
+    -- Same thing on X11
+    { key = "<leader>tcx", desc = "Copy (xclip)", cmd = "xclip -selection clipboard", input = "{{description}}" },
+    -- Placeholders can go straight into the command too
+    { key = "<leader>tN", desc = "Notify", cmd = "notify-send {{project}} {{description}}", notify = false },
+    -- Run your own script
+    { key = "<leader>tS", desc = "Send to Slack", cmd = "~/bin/slack-task {{short_uuid}}" },
+  },
+})
+```
+
+Each entry takes:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `key` | yes | Normal-mode key sequence, bound in Markdown buffers like the built-in mappings |
+| `cmd` | yes | Shell command, run through Neovim's `'shell'`. `{{placeholders}}` in it are replaced by shell-escaped values |
+| `input` | no | Template rendered like [`copy_task_format`](#copy-task-format) and written to the command's stdin |
+| `desc` | no | Description shown in `:map` / which-key and in the notifications (defaults to `cmd`) |
+| `notify` | no | Set to `false` to skip the success notification. Failures are always reported |
+
+Placeholders are the same as for [Copy Task Format](#copy-task-format).
+
+**Quoting:** every placeholder in `cmd` is shell-escaped on its own, so a description
+containing quotes, `$` or backticks is passed as plain text and never run by the
+shell. Because of that, **don't wrap placeholders in quotes yourself**: write
+`notify-send {{description}}`, not `notify-send "{{description}}"`. To pass several
+fields as one piece of text, put them in `input` and let the command read stdin:
+`cmd = "wl-copy", input = "{{description}} {{tags}}"`, not
+`cmd = 'echo "{{description}} {{tags}}" | wl-copy'`.
+
+The command runs in the background, so programs that keep running (such as
+`wl-copy`) don't freeze the editor. When it finishes, frontline shows its output,
+or "done" if there was none. If it exits with an error, frontline shows the exit
+code and stderr. Entries without a `key` or `cmd` are skipped with a warning at
+`setup()`.
 
 ### Task Notes
 
