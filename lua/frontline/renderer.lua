@@ -336,6 +336,77 @@ PLACEHOLDERS.tags = {
   end,
 }
 
+-- show_tags: which tags {{icons}} shows. Each entry is a glob matched against
+-- the whole tag, case-sensitively: '*' matches any run of characters and '?'
+-- exactly one, so "meeting*" matches "meeting" and "meeting-weekly" but "bug"
+-- does not match "debug". Accepts a comma-separated string ("bug,meeting*") or
+-- a list ({ "bug", "meeting*" }); nil or empty shows no tags.
+
+-- Translate one glob into an anchored Lua pattern
+local function glob_to_pattern(glob)
+  local escaped = string.gsub(glob, "[%^%$%(%)%%%.%[%]%+%-]", "%%%0")
+  escaped = string.gsub(escaped, "%*", ".*")
+  escaped = string.gsub(escaped, "%?", ".")
+  return "^" .. escaped .. "$"
+end
+
+-- Normalize show_tags into a list of non-empty, trimmed globs
+local function tag_globs(show_tags)
+  local entries = {}
+  if type(show_tags) == "string" then
+    entries = vim.split(show_tags, ",", { plain = true })
+  elseif type(show_tags) == "table" then
+    entries = show_tags
+  end
+
+  local globs = {}
+  for _, entry in ipairs(entries) do
+    if type(entry) == "string" then
+      local glob = vim.trim(entry)
+      if glob ~= "" then
+        table.insert(globs, glob)
+      end
+    end
+  end
+  return globs
+end
+
+local function tag_patterns(show_tags)
+  local patterns = {}
+  for _, glob in ipairs(tag_globs(show_tags)) do
+    table.insert(patterns, glob_to_pattern(glob))
+  end
+  return patterns
+end
+
+-- The task's tags matching show_tags, in the task's own order
+function M.filter_tags(tags, show_tags)
+  local patterns = tag_patterns(show_tags)
+  local shown = {}
+  if not tags or #patterns == 0 then
+    return shown
+  end
+
+  for _, tag in ipairs(tags) do
+    for _, pattern in ipairs(patterns) do
+      if string.find(tag, pattern) then
+        table.insert(shown, tag)
+        break
+      end
+    end
+  end
+  return shown
+end
+
+-- The tags {{icons}} shows, rendered like {{tags}}
+local function format_shown_tags(task, show_tags)
+  local shown = M.filter_tags(task.tags, show_tags)
+  if #shown == 0 then
+    return ""
+  end
+  return "+" .. table.concat(shown, " +")
+end
+
 PLACEHOLDERS.urgency = {
   value = function(task)
     return task.urgency and tostring(task.urgency) or ""
@@ -430,9 +501,10 @@ PLACEHOLDERS.markers = {
   end,
 }
 
--- Everything the default format shows besides the description: the completion
--- date, the scheduled and due dates, and the marker group. Scheduled is left
--- out for completed tasks, where what was planned no longer matters.
+-- Everything the default format shows besides the description: the tags
+-- selected by show_tags, the completion date, the scheduled and due dates, and
+-- the marker group. Scheduled is left out for completed tasks, where what was
+-- planned no longer matters.
 PLACEHOLDERS.icons = {
   value = function(task, ctx)
     local parts = {}
@@ -443,6 +515,7 @@ PLACEHOLDERS.icons = {
       end
     end
 
+    add(format_shown_tags(task, ctx.show_tags))
     add(PLACEHOLDERS.completed.value(task, ctx))
     if task.status ~= "completed" then
       add(PLACEHOLDERS.scheduled.value(task, ctx))
@@ -529,6 +602,7 @@ end
 --   priority_labels: optional map from priority value to the text shown for it
 --   format: task_format template (default M.DEFAULT_TASK_FORMAT)
 --   bullet: list bullet (default M.DEFAULT_TASK_BULLET)
+--   show_tags: globs selecting the tags {{icons}} shows (default: none)
 -- The legacy positional form format_task(task, convert_to_local, use_relative,
 -- priority_labels) is still accepted.
 function M.format_task(task, opts, use_relative, priority_labels)
@@ -540,6 +614,7 @@ function M.format_task(task, opts, use_relative, priority_labels)
       priority_labels = opts.priority_labels,
       format = opts.format,
       bullet = opts.bullet,
+      show_tags = opts.show_tags,
     }
   else
     ctx = {

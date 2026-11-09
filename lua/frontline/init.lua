@@ -22,6 +22,8 @@ local config = {
     -- work = { rc = "...", notes_directory = "~/notes/work", note_template = "templates/task.md" },
     -- So is a per-workspace task line format, overriding task_format/task_bullet below:
     -- work = { rc = "...", task_format = "{{description}} {{project}} {{icons}}", task_bullet = "-" },
+    -- and the tags {{icons}} shows (see show_tags below):
+    -- work = { rc = "...", show_tags = "bug,review" },
   },
   default_workspace = nil, -- Name of the default workspace (uses system taskwarrior if nil)
   enable_reverse_dependencies = true, -- Enable reverse dependency tracking (anchor icon and "tasks this task is blocking" view)
@@ -45,6 +47,12 @@ local config = {
   -- for the full list of placeholders.
   task_format = "{{description}} {{icons}}",
   task_bullet = "*", -- Markdown list bullet each task line starts with ("-", "+", or "" for none)
+  -- Tags shown in {{icons}}, before the dates. Disabled by default, since tags
+  -- take a lot of room. Globs matched against the whole tag ('*' any run of
+  -- characters, '?' one character), as a comma-separated string or a list:
+  --   show_tags = "bug,review,meeting*"   or   show_tags = { "*" }  -- every tag
+  -- Overridable per workspace. The {{tags}} placeholder always shows every tag.
+  show_tags = nil,
   -- Text shown for each Taskwarrior priority value. Priority values are a UDA
   -- the user can redefine, so by default the value itself is displayed (e.g.
   -- "H", or "A" for uda.priority.values=A,B,C). Map any value to a symbol of
@@ -316,6 +324,7 @@ local function refresh_tasks()
         priority_labels = config.priority_labels,
         format = workspace_option(workspace, "task_format"),
         bullet = workspace_option(workspace, "task_bullet"),
+        show_tags = workspace_option(workspace, "show_tags"),
       }))
     end
 

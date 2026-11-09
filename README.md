@@ -16,6 +16,7 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 - 🎨 Smart autocomplete for projects, tags, dates, workspaces, and priorities
 - 🔃 Configurable task sorting: global default and per-view `sort:` / `sort.reverse:` directives
 - 🖌️ Configurable task line format, globally or per workspace: pick the placeholders and the bullet you want
+- 🏷️ Opt-in tags next to the dates, filtered with globs (`bug,review,meeting*`)
 
 ## Installation
 
@@ -131,6 +132,7 @@ require('frontline').setup({
       note_template = "templates/task.md",
       task_format = "{{description}} {{project}} {{icons}}",
       task_bullet = "-",
+      show_tags = "bug,review",
     },
   },
 })
@@ -236,7 +238,7 @@ without dates does not trail spaces.
 | Placeholder | Renders | Example |
 |-------------|---------|---------|
 | `{{description}}` | Task description | `Fix the login bug` |
-| `{{icons}}` | Everything the default layout shows besides the description: completion, scheduled, due, markers | `{✅2025-12-01} (⏱️2025-12-20) [⏰2025-12-25] [H🔒]` |
+| `{{icons}}` | Everything the default layout shows besides the description: the tags selected by [`show_tags`](#showing-tags), completion, scheduled, due, markers | `+bug {✅2025-12-01} (⏱️2025-12-20) [⏰2025-12-25] [H🔒]` |
 | `{{due}}` | Due date, in squared brackets with ⏰ | `[⏰2025-12-25]` |
 | `{{scheduled}}` | Scheduled date, in rounded parenthesis with ⏱️ | `(⏱️2025-12-20)` |
 | `{{completed}}` | Completion date of a **completed** task, in curly brackets with ✅ (alias: `{{end}}`) | `{✅2025-12-01}` |
@@ -246,7 +248,7 @@ without dates does not trail spaces.
 | `{{blocking}}` | ⚓ when other tasks depend on this one | `⚓` |
 | `{{recurring}}` | 🔁 when the task is an instance of a recurring task | `🔁` |
 | `{{project}}` | Project name | `work` |
-| `{{tags}}` | Tags, each with a `+` prefix | `+urgent +backend` |
+| `{{tags}}` | All the tags, each with a `+` prefix (not filtered by `show_tags`) | `+urgent +backend` |
 | `{{urgency}}` | Urgency score | `15.5` |
 
 Add `.raw` to any placeholder to drop its decoration — brackets, icon, or
@@ -300,7 +302,8 @@ task_bullet = "-"
 
 #### Notes
 
-- `{{icons}}` is the composition `{{completed}} {{scheduled}} {{due}} {{markers}}`,
+- `{{icons}}` is the composition `<show_tags> {{completed}} {{scheduled}} {{due}} {{markers}}`,
+  where `<show_tags>` is empty unless [`show_tags`](#showing-tags) is set, and
   with the scheduled date left out for completed tasks, where what was planned no
   longer matters. Listing the placeholders yourself gives you full control of the
   order; `{{scheduled}}` on its own always renders when the task has one.
@@ -311,6 +314,38 @@ task_bullet = "-"
   in `task_format`, along with any unknown placeholder or modifier, produces a
   warning at startup (naming the workspace, for a per-workspace format) and
   renders nothing.
+
+#### Showing Tags
+
+Tags are not part of the default line: a task can carry many, and they take a
+lot of room. Set `show_tags` to the tags you want to see, and `{{icons}}` shows
+the ones a task has, before the dates:
+
+```lua
+require('frontline').setup({
+  show_tags = "bug,review,meeting*",
+  -- or as a list: show_tags = { "bug", "review", "meeting*" }
+})
+```
+
+```markdown
+* [ ] Prepare the demo +review +meeting-weekly [⏰2025-12-25] [H] `abcd1234`
+```
+
+Each entry is a glob matched against the whole tag:
+
+| Glob | Matches |
+|------|---------|
+| `bug` | `bug` only — not `debug`, not `Bug` (matching is case-sensitive) |
+| `meeting*` | `meeting`, `meeting-weekly`, `meetings` |
+| `*bug` | `bug`, `debug` |
+| `v?` | `v1`, `v2`, but not `v10` |
+| `*` | every tag |
+
+Tags are listed in the task's own order, each once, in the same form as
+`{{tags}}`. `show_tags` can be set per workspace too, like `task_format`; set it
+to `""` in a workspace to turn tags off there while they are on globally. The
+`{{tags}}` placeholder is not affected: it always lists every tag.
 
 ### Date Display
 
@@ -661,6 +696,7 @@ require('frontline').setup({
 | `copy_task_format` | string | `"{{description}}"` | Template for the `<leader>tc` copy-to-clipboard action. See [Copy Task Format](#copy-task-format) below. |
 | `custom_actions` | table | `{}` | Your own mappings that run a shell command on the task under the cursor. See [Custom Actions](#custom-actions) below. |
 | `task_format` | string | `"{{description}} {{icons}}"` | Template for each task line in a filter view. Overridable per workspace. See [Task Format](#task-format) above. |
+| `show_tags` | string or list | `nil` | Tags shown in `{{icons}}`, as globs (`"bug,review,meeting*"`, `"*"` for all). Disabled when unset. Overridable per workspace. See [Showing Tags](#showing-tags) above. |
 | `task_bullet` | string | `"*"` | Markdown list bullet each task line starts with (`"-"`, `"+"`, or `""` for none). Overridable per workspace. |
 | `priority_labels` | table | `{}` | Text shown for each priority value. Empty means the value itself is displayed. See [Priority Display](#priority-display) below. |
 | `notes_directory` | string | `nil` | Directory where task notes are created (nil = current working directory). Overridden per workspace. |
