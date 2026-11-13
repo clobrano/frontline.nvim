@@ -748,55 +748,138 @@ function M.add_task_as_dependency()
   end
 end
 
--- Toggle task between started and unstarted.
+-- Convert a Taskwarrior UTC timestamp (20251113T103000Z) to a Unix epoch, or
+-- nil when it does not parse.
+function M.taskwarrior_time_to_epoch(stamp)
+  if type(stamp) ~= "string" then
+    return nil
+  end
+  local y, mo, d, h, mi, s = stamp:match("^(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)Z$")
+  if not y then
+    return nil
+  end
+  -- os.time reads the table as local time; shift by the local UTC offset.
+  local as_local = os.time({ year = tonumber(y), month = tonumber(mo), day = tonumber(d),
+    hour = tonumber(h), min = tonumber(mi), sec = tonumber(s), isdst = false })
+  local now = os.time()
+  local local_t, utc_t = os.date("*t", now), os.date("!*t", now)
+  local_t.isdst, utc_t.isdst = false, false
+  return as_local + (os.time(local_t) - os.time(utc_t))
+end
+
+-- Human-readable duration: "45s", "42m", "1h 05m", "2d 3h".
+function M.format_elapsed(seconds)
+  seconds = math.max(0, math.floor(seconds or 0))
+  if seconds < 60 then
+    return string.format("%ds", seconds)
+  end
+  local minutes = math.floor(seconds / 60)
+  if minutes < 60 then
+    return string.format("%dm", minutes)
+  end
+  local hours = math.floor(minutes / 60)
+  if hours < 24 then
+    return string.format("%dh %02dm", hours, minutes % 60)
+  end
+  return string.format("%dd %dh", math.floor(hours / 24), hours % 24)
+end
+
+-- When a task was started, as "10:32" for today or "2025-11-12 10:32" otherwise.
+local function format_start_time(epoch)
+  if os.date("%Y-%m-%d", epoch) == os.date("%Y-%m-%d") then
+    return os.date("%H:%M", epoch)
+  end
+  return os.date("%Y-%m-%d %H:%M", epoch)
+end
+
+-- Export a single task, reporting failures. Returns the task table or nil.
+local function export_task(hash, workspace)
+  local cmd = build_task_command(string.format("%s export", hash), workspace)
+  local task_json = vim.fn.system(cmd)
+  task_json = filter_taskwarrior_messages(task_json, workspace)
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Failed to get task status", vim.log.levels.ERROR)
+    return nil
+  end
+
+  local success, tasks = pcall(vim.fn.json_decode, task_json)
+  if not success or type(tasks) ~= "table" or #tasks == 0 then
+    vim.notify("Failed to parse task data", vim.log.levels.ERROR)
+    return nil
+  end
+
+  return tasks[1]
+end
+
+-- Start or stop a task. `action` is "start", "stop" or "toggle". Start and
+-- stop are idempotent: asking for the state the task is already in changes
+-- nothing and says so, which makes them safe to press when the task's state is
+-- not visible. Every outcome names the task, so it is clear what happened.
 -- Takes the same optional hash and on_complete as toggle_done.
-function M.toggle_started(hash, on_complete)
+local function set_started(action, hash, on_complete)
   hash = hash or M.get_task_hash_under_cursor()
   if not hash then
     return
   end
 
-  -- Get current workspace for proper task operations
   local workspace = require("frontline").get_current_workspace()
-
-  -- Get current task status to determine action
-  local cmd = build_task_command(string.format("%s export", hash), workspace)
-  local task_json = vim.fn.system(cmd)
-  task_json = filter_taskwarrior_messages(task_json, workspace)
-  local exit_code = vim.v.shell_error
-
-  if exit_code ~= 0 then
-    vim.notify("Failed to get task status", vim.log.levels.ERROR)
+  local task = export_task(hash, workspace)
+  if not task then
     return
   end
 
-  -- Parse JSON to check if started
-  local success, tasks = pcall(vim.fn.json_decode, task_json)
-  if not success or not tasks or #tasks == 0 then
-    vim.notify("Failed to parse task data", vim.log.levels.ERROR)
+  local description = task.description or hash
+  local started_at = M.taskwarrior_time_to_epoch(task.start)
+  local is_active = task.start ~= nil
+
+  if action == "toggle" then
+    action = is_active and "stop" or "start"
+  end
+
+  if action == "start" and is_active then
+    local since = started_at and (" since " .. format_start_time(started_at)) or ""
+    vim.notify(string.format("Already active%s: %s", since, description), vim.log.levels.INFO)
     return
   end
 
-  local task = tasks[1]
-  local task_args
+  if action == "stop" and not is_active then
+    vim.notify("Not active: " .. description, vim.log.levels.INFO)
+    return
+  end
 
-  if task.start then
-    -- Stop the task
-    task_args = string.format("%s stop", hash)
-    vim.notify("Stopping task...", vim.log.levels.INFO)
+  if not execute_task_command(string.format("%s %s", hash, action), workspace) then
+    return
+  end
+
+  if action == "start" then
+    vim.notify("▶ Started: " .. description, vim.log.levels.INFO)
   else
-    -- Start the task
-    task_args = string.format("%s start", hash)
-    vim.notify("Starting task...", vim.log.levels.INFO)
+    local elapsed = started_at and (" (active " .. M.format_elapsed(os.time() - started_at) .. ")") or ""
+    vim.notify(string.format("■ Stopped: %s%s", description, elapsed), vim.log.levels.INFO)
   end
 
-  if execute_task_command(task_args, workspace) then
-    if on_complete then
-      on_complete()
-    else
-      require("frontline").refresh_current_buffer(hash)
-    end
+  if on_complete then
+    on_complete()
+  else
+    require("frontline").refresh_current_buffer(hash)
   end
+end
+
+-- Start the task; does nothing (and says so) if it is already active.
+function M.start_task(hash, on_complete)
+  set_started("start", hash, on_complete)
+end
+
+-- Stop the task; does nothing (and says so) if it is not active.
+function M.stop_task(hash, on_complete)
+  set_started("stop", hash, on_complete)
+end
+
+-- Toggle task between started and unstarted. Used by the task View, where the
+-- task's state is on screen; not bound in markdown buffers by default.
+function M.toggle_started(hash, on_complete)
+  set_started("toggle", hash, on_complete)
 end
 
 -- Modify a task with the given input string (called by FrontlineModifyTask command)

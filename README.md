@@ -427,7 +427,8 @@ Place your cursor on any task line and use these default keybindings:
 | Keybinding | Action | Description |
 |------------|--------|-------------|
 | `<leader>td` | Toggle Done | Mark task as complete or reopen it |
-| `<leader>ts` | Toggle Started | Start or stop working on task |
+| `<leader>ts` | Start Task | Start working on the task (does nothing if it is already active) |
+| `<leader>tS` | Stop Task | Stop working on the task (does nothing if it is not active) |
 | `<leader>tv` | View Task | Open the compact task View (see below) |
 | `<leader>ta` | Add Annotation | Add a note to the task |
 | `<leader>tt` | Add TODO Annotation | Add a note pre-filled with `TODO: ` |
@@ -646,7 +647,8 @@ require('frontline').setup({
   },
   mappings = {
     toggle_done = "<leader>td",      -- Toggle task done/undone
-    toggle_started = "<leader>ts",   -- Toggle task started/unstarted
+    start_task = "<leader>ts",       -- Start task (no-op if already active)
+    stop_task = "<leader>tS",        -- Stop task (no-op if not active)
     view_task = "<leader>tv",        -- Open the task View
     add_annotation = "<leader>ta",   -- Add task annotation
     modify_task = "<leader>tm",      -- Modify task properties
@@ -710,7 +712,9 @@ require('frontline').setup({
 | `view.show_dependencies` | boolean | true | Show the "Blocked by" / "Blocking" sections in the View |
 | `view.annotation_dates` | boolean | true | Prefix annotations in the View with their date |
 | `mappings.toggle_done` | string | `"<leader>td"` | Keybinding to toggle task done/undone |
-| `mappings.toggle_started` | string | `"<leader>ts"` | Keybinding to toggle task started/unstarted |
+| `mappings.start_task` | string | `"<leader>ts"` | Keybinding to start the task; reports instead if it is already active |
+| `mappings.stop_task` | string | `"<leader>tS"` | Keybinding to stop the task; reports instead if it is not active |
+| `mappings.toggle_started` | string | `nil` | Keybinding to toggle started/stopped (no default; see below) |
 | `mappings.view_task` | string | `"<leader>tv"` | Keybinding to open the task View |
 | `mappings.modify_task` | string | `"<leader>tm"` | Keybinding to modify task |
 | `mappings.add_annotation` | string | `"<leader>ta"` | Keybinding to add annotation |
@@ -728,12 +732,37 @@ require('frontline').setup({
 require('frontline').setup({
   mappings = {
     toggle_done = "<leader>td",
-    toggle_started = false,  -- Disable this mapping
+    stop_task = false,  -- Disable this mapping
     modify_task = "<leader>tm",
     add_annotation = "<leader>ta",
   },
 })
 ```
+
+### Starting and stopping tasks
+
+Start and stop are separate keys rather than one toggle: in a regular markdown
+note you cannot see whether a task is active, so a toggle cannot tell you what
+it is about to do. Both keys are safe to press again: `<leader>ts` on an active
+task only reports `Already active since 10:32: <description>`, and `<leader>tS`
+on an inactive one reports `Not active: <description>`. When they do act, the
+message names the task, and stopping also shows how long it was active:
+`■ Stopped: Fix login bug (active 42m)`.
+
+To get the old single-key toggle back, bind `toggle_started` yourself (it takes
+precedence over `start_task` if both use the same key):
+
+```lua
+require('frontline').setup({
+  mappings = {
+    toggle_started = "<leader>ts",
+    start_task = false,
+    stop_task = false,
+  },
+})
+```
+
+In the task View, `s` still toggles, since the View shows the task's state.
 
 ### Copy Task Format
 
