@@ -75,7 +75,12 @@ local config = {
   },
   mappings = {
     toggle_done = "<leader>td",
-    toggle_started = "<leader>ts",
+    start_task = "<leader>ts",  -- start the task; no-op if already active
+    stop_task = "<leader>tS",   -- stop the task; no-op if not active
+    -- toggle_started has no default binding: outside a filter view the task's
+    -- state is not visible, so a toggle cannot tell you what it is about to do.
+    -- Set it explicitly to keep a single start/stop key.
+    toggle_started = nil,
     modify_task = "<leader>tm",
     view_task = "<leader>tv",
     add_annotation = "<leader>ta",
@@ -487,9 +492,20 @@ function M.setup(opts)
           vim.tbl_extend("force", opts_mapping, { desc = "Toggle task done/undone" }))
       end
 
-      -- Toggle task started/unstarted
+      -- Start / stop task
+      if config.mappings.start_task then
+        vim.keymap.set("n", config.mappings.start_task, function() mappings.start_task() end,
+          vim.tbl_extend("force", opts_mapping, { desc = "Start task" }))
+      end
+
+      if config.mappings.stop_task then
+        vim.keymap.set("n", config.mappings.stop_task, function() mappings.stop_task() end,
+          vim.tbl_extend("force", opts_mapping, { desc = "Stop task" }))
+      end
+
+      -- Toggle task started/unstarted (opt-in)
       if config.mappings.toggle_started then
-        vim.keymap.set("n", config.mappings.toggle_started, mappings.toggle_started,
+        vim.keymap.set("n", config.mappings.toggle_started, function() mappings.toggle_started() end,
           vim.tbl_extend("force", opts_mapping, { desc = "Toggle task started/unstarted" }))
       end
 
