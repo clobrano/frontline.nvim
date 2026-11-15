@@ -159,7 +159,7 @@ describe("link dependencies", function()
       blocked = {}
       link.unlink("cccccccc", false)
       assert.is_nil(offered)
-      assert.are.equal("Task has no dependencies to remove", notifications[#notifications].msg)
+      assert.are.equal("Task has no dependencies", notifications[#notifications].msg)
     end)
   end)
 end)

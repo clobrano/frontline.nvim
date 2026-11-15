@@ -1,7 +1,8 @@
 -- Link existing tasks as dependencies of the current task, or the other way
 -- round, by picking them from a fuzzy list of open tasks instead of typing
--- their IDs into a 'modify depends:' command. M.unlink does the reverse: it
--- lists the task's dependencies in both directions and removes the picked ones.
+-- their IDs into a 'modify depends:' command. M.unlink is the dependency list:
+-- it shows the task's dependencies in both directions, and removes the ones
+-- picked with <Enter>; <Esc> just closes it.
 --
 --   blocked_by: the picked tasks block the current task
 --               (current depends on each picked task)
@@ -391,12 +392,12 @@ function M.unlink(hash, workspace_rc, on_complete)
 
   local items = M.unlink_candidates(current, blocker_tasks, blocked_tasks)
   if #items == 0 then
-    vim.notify("Task has no dependencies to remove", vim.log.levels.INFO)
+    vim.notify("Task has no dependencies", vim.log.levels.INFO)
     return
   end
 
   local desc = current.description or short(current.uuid)
-  M.pick_many(items, "Dependencies to remove", function(selected)
+  M.pick_many(items, "Dependencies · <Enter> removes, <Esc> closes", function(selected)
     echo_selection(string.format("These links of \"%s\" will be removed:\n", desc), selected)
 
     local question = string.format("Remove %s from \"%s\"?",
