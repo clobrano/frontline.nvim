@@ -519,6 +519,8 @@ local KEYMAP_HELP = {
   { "d", "toggle done" },
   { "s", "toggle started" },
   { "e", "edit the task in Taskwarrior's editor" },
+  { "b", "pick open tasks that block this task" },
+  { "B", "pick open tasks this task blocks" },
   { "<CR>", "open the annotation's URL or file, or drill into a dependency" },
   { "y", "copy the annotation's URL or file path to the clipboard" },
   { "<BS>", "go back to the previous task" },
@@ -792,6 +794,26 @@ local function toggle_task(bufnr, fn_name)
   end)
 end
 
+-- Pick open tasks to link to the task the View is showing, then re-render so
+-- the new "Blocked by" / "Blocking" entries show up. fn_name is a function of
+-- frontline.link.
+local function link_tasks(bufnr, fn_name)
+  local st = get_state(bufnr)
+  if not st then
+    return
+  end
+
+  require("frontline.link")[fn_name](st.hash, st.workspace_rc or false, function()
+    refresh_origin(st)
+    if vim.api.nvim_buf_is_valid(bufnr) and state[bufnr] then
+      if st.win and vim.api.nvim_win_is_valid(st.win) then
+        vim.api.nvim_set_current_win(st.win)
+      end
+      rerender(bufnr)
+    end
+  end)
+end
+
 -- Hand the task over to Taskwarrior's interactive editor, the same one the
 -- edit_task mapping opens. The editor runs in a terminal split, which a floating
 -- window cannot host, so the View closes, the editor takes over the window the
@@ -852,6 +874,8 @@ local function setup_keymaps(bufnr)
   map("d", function() toggle_task(bufnr, "toggle_done") end, "Toggle task done")
   map("s", function() toggle_task(bufnr, "toggle_started") end, "Toggle task started")
   map("e", function() edit_task(bufnr) end, "Edit task in Taskwarrior's editor")
+  map("b", function() link_tasks(bufnr, "pick_blocking_tasks") end, "Pick tasks blocking this task")
+  map("B", function() link_tasks(bufnr, "pick_blocked_tasks") end, "Pick tasks blocked by this task")
   map("?", show_help, "Show task view keys")
 end
 
