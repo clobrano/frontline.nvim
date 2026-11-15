@@ -175,7 +175,10 @@ local function join_segments(segments, separator)
   return table.concat(parts, separator), highlights
 end
 
-local function dep_specs(specs, title, deps)
+-- direction is "blocker" for the "Blocked by" section (the dependency blocks
+-- this task) and "blocked" for "Blocking" (this task blocks it); 'x' needs it
+-- to know which task's depends to edit.
+local function dep_specs(specs, title, deps, direction)
   if #deps == 0 then
     return
   end
@@ -201,7 +204,7 @@ local function dep_specs(specs, title, deps)
       left,
       string.format("`%s`", dep.short_hash),
       { { group = is_open and "FrontlineViewDepOpen" or "FrontlineViewDepDone", from = 0, to = -1 } },
-      { kind = "dependency", uuid = dep.uuid },
+      { kind = "dependency", uuid = dep.uuid, direction = direction, description = dep.description },
       "FrontlineViewHash"
     ))
   end
@@ -352,8 +355,8 @@ function M.render(data, opts)
   local reverse_deps = data.reverse_deps or {}
   if opts.show_dependencies and (#forward_deps > 0 or #reverse_deps > 0) then
     table.insert(specs, line_spec(""))
-    dep_specs(specs, "Blocked by", forward_deps)
-    dep_specs(specs, "Blocking", reverse_deps)
+    dep_specs(specs, "Blocked by", forward_deps, "blocker")
+    dep_specs(specs, "Blocking", reverse_deps, "blocked")
   end
 
   -- Compose: right-align the trailing hashes against the widest line. The
@@ -515,10 +518,13 @@ local state = {}
 local KEYMAP_HELP = {
   { "q, <Esc>", "close the view" },
   { "a", "add an annotation" },
-  { "x", "toggle TODO/DONE on the annotation under the cursor" },
+  { "x", "toggle TODO/DONE on an annotation, or remove the dependency link under the cursor" },
+  { "V…x", "remove every dependency link in the selected lines" },
   { "d", "toggle done" },
   { "s", "toggle started" },
   { "e", "edit the task in Taskwarrior's editor" },
+  { "b", "pick open tasks that block this task" },
+  { "B", "pick open tasks this task blocks" },
   { "<CR>", "open the annotation's URL or file, or drill into a dependency" },
   { "y", "copy the annotation's URL or file path to the clipboard" },
   { "<BS>", "go back to the previous task" },
@@ -792,6 +798,146 @@ local function toggle_task(bufnr, fn_name)
   end)
 end
 
+-- Pick open tasks to link to the task the View is showing, then re-render so
+-- the new "Blocked by" / "Blocking" entries show up. fn_name is a function of
+-- frontline.link.
+local function link_tasks(bufnr, fn_name)
+  local st = get_state(bufnr)
+  if not st then
+    return
+  end
+
+  require("frontline.link")[fn_name](st.hash, st.workspace_rc or false, function()
+    refresh_origin(st)
+    if vim.api.nvim_buf_is_valid(bufnr) and state[bufnr] then
+      if st.win and vim.api.nvim_win_is_valid(st.win) then
+        vim.api.nvim_set_current_win(st.win)
+      end
+      rerender(bufnr)
+    end
+  end)
+end
+
+-- Remove the dependency links rendered on the given lines, after a
+-- confirmation that starts on "No" so a stray <Enter> keeps the links. Lines
+-- that are not dependencies are skipped. Blockers are removed from this task in
+-- one command and this task from the tasks it blocks in another, so each
+-- direction is one 'task undo' step (per task on Taskwarrior 2 for the latter).
+local function unlink_lines(bufnr, lnums)
+  local st = get_state(bufnr)
+  if not st then
+    return
+  end
+
+  local deps = {}
+  for _, lnum in ipairs(lnums) do
+    local meta = st.line_meta and st.line_meta[lnum]
+    if meta and meta.kind == "dependency" then
+      table.insert(deps, meta)
+    end
+  end
+  if #deps == 0 then
+    vim.notify("No dependency links in the selection", vim.log.levels.INFO)
+    return
+  end
+
+  local task = st.data and st.data.task or {}
+  local this = task.description or short(task.uuid or st.hash)
+  local function describe(dep)
+    local other = dep.description or short(dep.uuid)
+    if dep.direction == "blocker" then
+      return string.format("\"%s\" blocks \"%s\"", other, this)
+    end
+    return string.format("\"%s\" blocks \"%s\"", this, other)
+  end
+
+  local question
+  if #deps == 1 then
+    question = "Remove link: " .. describe(deps[1]) .. "?"
+  else
+    local chunks = { { string.format("These %d links will be removed:\n", #deps), "Title" } }
+    for _, dep in ipairs(deps) do
+      table.insert(chunks, { "  " .. describe(dep) .. "\n", "Normal" })
+    end
+    vim.api.nvim_echo(chunks, false, {})
+    question = string.format("Remove %d dependency links?", #deps)
+  end
+
+  vim.ui.select({ "No", "Yes" }, { prompt = question }, function(choice)
+    if choice ~= "Yes" then
+      vim.notify("Dependency removal cancelled", vim.log.levels.INFO)
+      return
+    end
+
+    local blockers, blocked = {}, {}
+    for _, dep in ipairs(deps) do
+      table.insert(dep.direction == "blocker" and blockers or blocked, dep.uuid)
+    end
+
+    local errors = {}
+    local current_uuid = task.uuid or st.hash
+    for _, args in ipairs(require("frontline.link").unlink_commands(current_uuid, blockers, blocked)) do
+      local ok, output = task_client.run_command(args, st.workspace_rc)
+      if not ok then
+        table.insert(errors, vim.trim(output or ""))
+      end
+    end
+
+    if #errors > 0 then
+      vim.notify("Failed to remove dependency links:\n" .. table.concat(errors, "\n"), vim.log.levels.ERROR)
+    else
+      vim.notify(#deps == 1 and ("Removed link: " .. describe(deps[1]))
+        or string.format("Removed %d dependency links", #deps), vim.log.levels.INFO)
+    end
+
+    -- Re-render even on failure, so the View shows what Taskwarrior did
+    if not (vim.api.nvim_buf_is_valid(bufnr) and state[bufnr]) then
+      return
+    end
+    if st.win and vim.api.nvim_win_is_valid(st.win) then
+      vim.api.nvim_set_current_win(st.win)
+    end
+    local cursor = vim.api.nvim_win_get_cursor(st.win)
+    rerender(bufnr)
+    refresh_origin(st)
+    local last = vim.api.nvim_buf_line_count(bufnr)
+    vim.api.nvim_win_set_cursor(st.win, { math.min(cursor[1], last), 0 })
+  end)
+end
+
+-- x: toggle the annotation, or remove the dependency link, under the cursor
+local function act_on_line(bufnr)
+  local st = get_state(bufnr)
+  if not st then
+    return
+  end
+  local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  local meta = st.line_meta and st.line_meta[lnum]
+  if meta and meta.kind == "dependency" then
+    unlink_lines(bufnr, { lnum })
+  elseif meta and meta.kind == "annotation" then
+    toggle_annotation(bufnr)
+  else
+    vim.notify("Nothing to toggle or unlink on this line", vim.log.levels.INFO)
+  end
+end
+
+-- x in visual mode: remove every dependency link in the selected lines
+local function unlink_selection(bufnr)
+  local first, last = vim.fn.line("v"), vim.fn.line(".")
+  if first > last then
+    first, last = last, first
+  end
+  -- Leave visual mode before the confirmation prompt opens
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+
+  local lnums = {}
+  for lnum = first, last do
+    table.insert(lnums, lnum)
+  end
+  unlink_lines(bufnr, lnums)
+end
+
 -- Hand the task over to Taskwarrior's interactive editor, the same one the
 -- edit_task mapping opens. The editor runs in a terminal split, which a floating
 -- window cannot host, so the View closes, the editor takes over the window the
@@ -845,13 +991,17 @@ local function setup_keymaps(bufnr)
   map("q", function() close_view(bufnr) end, "Close task view")
   map("<Esc>", function() close_view(bufnr) end, "Close task view")
   map("a", function() annotate(bufnr) end, "Add annotation")
-  map("x", function() toggle_annotation(bufnr) end, "Toggle TODO/DONE annotation")
+  map("x", function() act_on_line(bufnr) end, "Toggle TODO/DONE annotation or remove dependency link")
+  vim.keymap.set("x", "x", function() unlink_selection(bufnr) end,
+    { buffer = bufnr, nowait = true, silent = true, desc = "Remove the selected dependency links" })
   map("<CR>", function() activate(bufnr) end, "Open annotation resource or dependency")
   map("y", function() yank_resource(bufnr) end, "Copy annotation URL or file path")
   map("<BS>", function() go_back(bufnr) end, "Back to previous task")
   map("d", function() toggle_task(bufnr, "toggle_done") end, "Toggle task done")
   map("s", function() toggle_task(bufnr, "toggle_started") end, "Toggle task started")
   map("e", function() edit_task(bufnr) end, "Edit task in Taskwarrior's editor")
+  map("b", function() link_tasks(bufnr, "pick_blocking_tasks") end, "Pick tasks blocking this task")
+  map("B", function() link_tasks(bufnr, "pick_blocked_tasks") end, "Pick tasks blocked by this task")
   map("?", show_help, "Show task view keys")
 end
 

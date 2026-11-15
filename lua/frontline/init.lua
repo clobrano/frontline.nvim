@@ -92,6 +92,8 @@ local config = {
     show_blocking_dependencies = "<leader>tb",
     show_blocked_tasks = "<leader>tr",
     add_dependency = "<leader>tB",
+    link_blocking_tasks = "<leader>tl", -- pick open tasks that block this one
+    link_blocked_tasks = "<leader>tL",  -- pick open tasks this one blocks
     undo_task = "<leader>tu",
     create_task = "<leader>tn",
     copy_task = "<leader>tc",
@@ -556,6 +558,18 @@ function M.setup(opts)
       if config.mappings.add_dependency then
         vim.keymap.set("n", config.mappings.add_dependency, mappings.add_task_as_dependency,
           vim.tbl_extend("force", opts_mapping, { desc = "Add new task as dependency" }))
+      end
+
+      -- Pick existing open tasks that block this task
+      if config.mappings.link_blocking_tasks then
+        vim.keymap.set("n", config.mappings.link_blocking_tasks, function() require("frontline.link").pick_blocking_tasks() end,
+          vim.tbl_extend("force", opts_mapping, { desc = "Pick tasks blocking this task" }))
+      end
+
+      -- Pick existing open tasks that this task blocks
+      if config.mappings.link_blocked_tasks then
+        vim.keymap.set("n", config.mappings.link_blocked_tasks, function() require("frontline.link").pick_blocked_tasks() end,
+          vim.tbl_extend("force", opts_mapping, { desc = "Pick tasks blocked by this task" }))
       end
 
       -- Undo task
