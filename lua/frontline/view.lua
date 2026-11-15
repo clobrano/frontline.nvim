@@ -521,6 +521,7 @@ local KEYMAP_HELP = {
   { "e", "edit the task in Taskwarrior's editor" },
   { "b", "pick open tasks that block this task" },
   { "B", "pick open tasks this task blocks" },
+  { "X", "pick dependencies to remove" },
   { "<CR>", "open the annotation's URL or file, or drill into a dependency" },
   { "y", "copy the annotation's URL or file path to the clipboard" },
   { "<BS>", "go back to the previous task" },
@@ -795,8 +796,8 @@ local function toggle_task(bufnr, fn_name)
 end
 
 -- Pick open tasks to link to the task the View is showing, then re-render so
--- the new "Blocked by" / "Blocking" entries show up. fn_name is a function of
--- frontline.link.
+-- the "Blocked by" / "Blocking" sections are current. fn_name is a function of
+-- frontline.link (pick_blocking_tasks, pick_blocked_tasks or unlink).
 local function link_tasks(bufnr, fn_name)
   local st = get_state(bufnr)
   if not st then
@@ -876,6 +877,7 @@ local function setup_keymaps(bufnr)
   map("e", function() edit_task(bufnr) end, "Edit task in Taskwarrior's editor")
   map("b", function() link_tasks(bufnr, "pick_blocking_tasks") end, "Pick tasks blocking this task")
   map("B", function() link_tasks(bufnr, "pick_blocked_tasks") end, "Pick tasks blocked by this task")
+  map("X", function() link_tasks(bufnr, "unlink") end, "Pick dependencies to remove")
   map("?", show_help, "Show task view keys")
 end
 

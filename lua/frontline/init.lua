@@ -94,6 +94,7 @@ local config = {
     add_dependency = "<leader>tB",
     link_blocking_tasks = "<leader>tl", -- pick open tasks that block this one
     link_blocked_tasks = "<leader>tL",  -- pick open tasks this one blocks
+    unlink_dependencies = "<leader>tx", -- pick dependencies (either way) to remove
     undo_task = "<leader>tu",
     create_task = "<leader>tn",
     copy_task = "<leader>tc",
@@ -570,6 +571,12 @@ function M.setup(opts)
       if config.mappings.link_blocked_tasks then
         vim.keymap.set("n", config.mappings.link_blocked_tasks, function() require("frontline.link").pick_blocked_tasks() end,
           vim.tbl_extend("force", opts_mapping, { desc = "Pick tasks blocked by this task" }))
+      end
+
+      -- Pick dependencies, in either direction, to remove
+      if config.mappings.unlink_dependencies then
+        vim.keymap.set("n", config.mappings.unlink_dependencies, function() require("frontline.link").unlink() end,
+          vim.tbl_extend("force", opts_mapping, { desc = "Pick task dependencies to remove" }))
       end
 
       -- Undo task

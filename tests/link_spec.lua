@@ -3,7 +3,7 @@ local link = require("frontline.link")
 describe("link dependencies", function()
   local original_system, original_notify, original_select, original_echo, original_pick, original_refresh
   local frontline = require("frontline")
-  local current, others, commands, notifications, refreshed, offered, answer
+  local current, others, blockers, blocked, commands, notifications, refreshed, offered, answer
 
   before_each(function()
     current = { uuid = "cccccccc-0000", description = "Ship release", status = "pending", depends = { "aaaaaaaa-0000" } }
@@ -14,6 +14,8 @@ describe("link dependencies", function()
       { uuid = "dddddddd-0000", description = "Write docs", project = "web", tags = { "doc" }, urgency = 1 },
       { uuid = "eeeeeeee-0000", description = "Fix CI", urgency = 5 },
     }
+    blockers = { others[2] }
+    blocked = { others[3] }
     commands, notifications, refreshed, offered, answer = {}, {}, {}, nil, "Yes"
 
     original_system = vim.fn.system
@@ -30,6 +32,10 @@ describe("link dependencies", function()
         return vim.fn.json_encode({ current })
       elseif cmd:match("'status:pending' export$") then
         return vim.fn.json_encode(others)
+      elseif cmd:match("'depends%.any:cccccccc%-0000' export$") then
+        return vim.fn.json_encode(blocked)
+      elseif cmd:match("^task '%x+%-0000[^']*' export$") then
+        return vim.fn.json_encode(blockers)
       end
       return ""
     end
@@ -103,5 +109,57 @@ describe("link dependencies", function()
     link.pick_blocking_tasks("cccccccc", false)
     assert.is_nil(offered)
     assert.are.equal("No other open tasks to link", notifications[#notifications].msg)
+  end)
+
+  describe("unlink", function()
+    before_each(function()
+      -- aaaaaaaa is exported; zzzzzzzz is a stale link to a task that is gone
+      current.depends = { "aaaaaaaa-0000", "zzzzzzzz-0000" }
+      table.insert(blocked, { uuid = "gggggggg-0000", description = "Deleted", status = "deleted",
+        depends = { "cccccccc-0000" } })
+    end)
+
+    it("lists the dependencies in both directions, tagged", function()
+      link.unlink("cccccccc", false)
+      local labels = vim.tbl_map(function(i) return i.label end, offered)
+      assert.are.same({
+        "[blocks this] Already a blocker (aaaaaaaa)",
+        "[blocks this] (task not found) (zzzzzzzz)",
+        "[blocked by this] Blocked by current (bbbbbbbb)",
+      }, labels)
+    end)
+
+    it("removes the picked links, one command per direction", function()
+      link.unlink("cccccccc", false)
+      assert.are.same({
+        "cccccccc-0000 modify depends:-zzzzzzzz-0000",
+        "rc.bulk=0 rc.confirmation=off bbbbbbbb-0000 modify depends:-cccccccc-0000",
+      }, modify_commands())
+      assert.are.equal("Removed 2 dependencies", notifications[#notifications].msg)
+      assert.are.same({ "cccccccc" }, refreshed)
+    end)
+
+    it("removes several blockers in a single command", function()
+      link.pick_many = function(items, _, on_choice) on_choice({ items[1], items[2] }) end
+      link.unlink("cccccccc", false)
+      assert.are.same({
+        "cccccccc-0000 modify depends:-aaaaaaaa-0000,-zzzzzzzz-0000",
+      }, modify_commands())
+    end)
+
+    it("changes nothing when the confirmation is declined", function()
+      answer = "No"
+      link.unlink("cccccccc", false)
+      assert.are.same({}, modify_commands())
+      assert.are.same({}, refreshed)
+    end)
+
+    it("reports when the task has no dependencies", function()
+      current.depends = nil
+      blocked = {}
+      link.unlink("cccccccc", false)
+      assert.is_nil(offered)
+      assert.are.equal("Task has no dependencies to remove", notifications[#notifications].msg)
+    end)
   end)
 end)

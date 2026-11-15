@@ -1,6 +1,7 @@
 -- Link existing tasks as dependencies of the current task, or the other way
 -- round, by picking them from a fuzzy list of open tasks instead of typing
--- their IDs into a 'modify depends:' command.
+-- their IDs into a 'modify depends:' command. M.unlink does the reverse: it
+-- lists the task's dependencies in both directions and removes the picked ones.
 --
 --   blocked_by: the picked tasks block the current task
 --               (current depends on each picked task)
@@ -190,14 +191,51 @@ end
 -- Entry point
 --------------------------------------------------------------------------------
 
-local function confirm(question, on_yes)
+local function confirm(question, on_yes, cancelled_msg)
   vim.ui.select({ "Yes", "No" }, { prompt = question }, function(choice)
     if choice == "Yes" then
       on_yes()
     else
-      vim.notify("Dependency linking cancelled", vim.log.levels.INFO)
+      vim.notify(cancelled_msg or "Dependency linking cancelled", vim.log.levels.INFO)
     end
   end)
+end
+
+-- Resolve the task and workspace the pickers work on. Returns current, rc, or
+-- nil after telling the user what went wrong.
+local function load_current(hash, workspace_rc)
+  hash = hash or require("frontline.mappings").get_task_hash_under_cursor()
+  if not hash then
+    return nil
+  end
+  if workspace_rc == nil then
+    workspace_rc = require("frontline").get_current_workspace_rc()
+  end
+
+  local found, err = task_client.execute_query(hash, workspace_rc)
+  if not found or #found == 0 then
+    vim.notify("Failed to get task information" .. (err and (": " .. err) or ""), vim.log.levels.ERROR)
+    return nil
+  end
+  return found[1], workspace_rc
+end
+
+-- After a change: refresh even on failure, since Taskwarrior may have changed
+-- some tasks before stopping and the buffer should show what actually happened.
+local function finish(current, on_complete)
+  if on_complete then
+    on_complete()
+  else
+    require("frontline").refresh_current_buffer(short(current.uuid))
+  end
+end
+
+local function echo_selection(header, selected)
+  local chunks = { { header, "Title" } }
+  for _, item in ipairs(selected) do
+    table.insert(chunks, { "  " .. item.label .. "\n", "Normal" })
+  end
+  vim.api.nvim_echo(chunks, false, {})
 end
 
 -- Pick open tasks and link them to the task `hash`.
@@ -212,21 +250,11 @@ function M.pick(mode, hash, workspace_rc, on_complete)
     return
   end
 
-  local frontline = require("frontline")
-  hash = hash or require("frontline.mappings").get_task_hash_under_cursor()
-  if not hash then
+  local current
+  current, workspace_rc = load_current(hash, workspace_rc)
+  if not current then
     return
   end
-  if workspace_rc == nil then
-    workspace_rc = frontline.get_current_workspace_rc()
-  end
-
-  local found, err = task_client.execute_query(hash, workspace_rc)
-  if not found or #found == 0 then
-    vim.notify("Failed to get task information" .. (err and (": " .. err) or ""), vim.log.levels.ERROR)
-    return
-  end
-  local current = found[1]
 
   local open_tasks, open_err = task_client.execute_query("status:pending", workspace_rc)
   if not open_tasks then
@@ -247,12 +275,10 @@ function M.pick(mode, hash, workspace_rc, on_complete)
 
   M.pick_many(items, spec.prompt, function(selected)
     local picked = {}
-    local chunks = { { spec.header(current.description or short(current.uuid)), "Title" } }
     for _, item in ipairs(selected) do
       table.insert(picked, item.task)
-      table.insert(chunks, { "  " .. item.label .. "\n", "Normal" })
     end
-    vim.api.nvim_echo(chunks, false, {})
+    echo_selection(spec.header(current.description or short(current.uuid)), selected)
 
     confirm(spec.question(#picked, current.description or short(current.uuid)), function()
       local ok, output = task_client.run_command(M.link_command(current, picked, mode), workspace_rc)
@@ -262,15 +288,7 @@ function M.pick(mode, hash, workspace_rc, on_complete)
         vim.notify(string.format("Linked %d task%s", #picked, #picked == 1 and "" or "s"), vim.log.levels.INFO)
       end
 
-      -- Refresh even on failure: Taskwarrior may have linked some tasks before
-      -- stopping, and the buffer should show what actually happened.
-      do
-        if on_complete then
-          on_complete()
-        else
-          frontline.refresh_current_buffer(short(current.uuid))
-        end
-      end
+      finish(current, on_complete)
     end)
   end)
 end
@@ -281,6 +299,126 @@ end
 
 function M.pick_blocked_tasks(hash, workspace_rc, on_complete)
   M.pick("blocks", hash, workspace_rc, on_complete)
+end
+
+--------------------------------------------------------------------------------
+-- Removing dependencies
+--------------------------------------------------------------------------------
+
+local UNLINK_TAGS = {
+  blocker = "[blocks this]",
+  blocked = "[blocked by this]",
+}
+
+-- Every task linked to `current`, both ways, as picker items:
+--   kind "blocker": a task in current.depends (it blocks current)
+--   kind "blocked": a task whose depends holds current (current blocks it)
+-- blocker_tasks are the exported tasks for current.depends; a UUID with no
+-- exported task (purged, or in another database) is still listed so the stale
+-- link can be removed. Deleted tasks that depend on current are left out.
+function M.unlink_candidates(current, blocker_tasks, blocked_tasks)
+  local by_uuid = {}
+  for _, task in ipairs(blocker_tasks or {}) do
+    by_uuid[task.uuid] = task
+  end
+
+  local function label(kind, task)
+    local text = UNLINK_TAGS[kind] .. " " .. M.format_candidate(task)
+    if task.status == "completed" then
+      text = text .. " (completed)"
+    end
+    return text
+  end
+
+  local items = {}
+  for _, uuid in ipairs(current.depends or {}) do
+    local task = by_uuid[uuid] or { uuid = uuid, description = "(task not found)" }
+    table.insert(items, { kind = "blocker", task = task, label = label("blocker", task) })
+  end
+  for _, task in ipairs(blocked_tasks or {}) do
+    if task.uuid ~= current.uuid and task.status ~= "deleted" then
+      table.insert(items, { kind = "blocked", task = task, label = label("blocked", task) })
+    end
+  end
+  return items
+end
+
+-- At most two Taskwarrior commands remove the picked links: one on the
+-- current task for its blockers (a single undo step), one on all the picked
+-- tasks it blocks (a single undo step on Taskwarrior 3, one per task on 2).
+function M.unlink_commands(current, picked)
+  local blockers, blocked = {}, {}
+  for _, item in ipairs(picked) do
+    if item.kind == "blocker" then
+      table.insert(blockers, "-" .. item.task.uuid)
+    else
+      table.insert(blocked, item.task.uuid)
+    end
+  end
+
+  local cmds = {}
+  if #blockers > 0 then
+    table.insert(cmds, string.format("%s modify depends:%s", current.uuid, table.concat(blockers, ",")))
+  end
+  if #blocked > 0 then
+    table.insert(cmds, string.format("rc.bulk=0 rc.confirmation=off %s modify depends:-%s",
+      table.concat(blocked, " "), current.uuid))
+  end
+  return cmds
+end
+
+-- Pick dependencies of the task `hash`, in either direction, and remove them.
+-- Arguments as for M.pick.
+function M.unlink(hash, workspace_rc, on_complete)
+  local current
+  current, workspace_rc = load_current(hash, workspace_rc)
+  if not current then
+    return
+  end
+
+  -- UUIDs separated by spaces: Taskwarrior only builds comma sets from numeric
+  -- IDs. A failed lookup only costs the descriptions; the links are still listed.
+  local blocker_tasks = {}
+  if current.depends and #current.depends > 0 then
+    blocker_tasks = task_client.execute_query(table.concat(current.depends, " "), workspace_rc) or {}
+  end
+
+  local blocked_tasks, rev_err = task_client.get_reverse_dependencies(current.uuid, workspace_rc)
+  if not blocked_tasks then
+    vim.notify("Failed to get blocked tasks: " .. rev_err, vim.log.levels.ERROR)
+    return
+  end
+
+  local items = M.unlink_candidates(current, blocker_tasks, blocked_tasks)
+  if #items == 0 then
+    vim.notify("Task has no dependencies to remove", vim.log.levels.INFO)
+    return
+  end
+
+  local desc = current.description or short(current.uuid)
+  M.pick_many(items, "Dependencies to remove", function(selected)
+    echo_selection(string.format("These links of \"%s\" will be removed:\n", desc), selected)
+
+    local question = string.format("Remove %s from \"%s\"?",
+      #selected == 1 and "this dependency" or (#selected .. " dependencies"), desc)
+    confirm(question, function()
+      local errors = {}
+      for _, args in ipairs(M.unlink_commands(current, selected)) do
+        local ok, output = task_client.run_command(args, workspace_rc)
+        if not ok then
+          table.insert(errors, vim.trim(output or ""))
+        end
+      end
+
+      if #errors > 0 then
+        vim.notify("Failed to remove dependencies:\n" .. table.concat(errors, "\n"), vim.log.levels.ERROR)
+      else
+        vim.notify(string.format("Removed %d dependenc%s", #selected, #selected == 1 and "y" or "ies"),
+          vim.log.levels.INFO)
+      end
+      finish(current, on_complete)
+    end, "Dependency removal cancelled")
+  end)
 end
 
 return M
