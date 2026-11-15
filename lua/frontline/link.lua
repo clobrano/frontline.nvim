@@ -107,9 +107,27 @@ local function is_module_available(name)
 end
 
 -- Let the user pick one or more items. on_choice gets the list of picked items
--- (never called when the picker is dismissed). Telescope and fzf.vim allow
--- several items with <Tab>; vim.ui.select picks one.
-function M.pick_many(items, prompt, on_choice)
+-- when they press <Enter>; nothing is called when the picker is dismissed.
+-- Telescope and fzf.vim allow several items with <Tab>; vim.ui.select picks one.
+--
+-- alt, optional, adds a second action on its own key, for things that should
+-- not happen on a stray <Enter>:
+--   { telescope_key = "<C-x>", fzf_key = "ctrl-x", label = "Remove link",
+--     on_choice = function(selected) ... end, require_marked = true }
+-- With require_marked, Telescope runs alt only on items marked with <Tab>:
+-- pressed with nothing marked it does nothing but say so, and stays open.
+-- fzf cannot tell marked lines from the highlighted one, so there (and with
+-- vim.ui.select) the caller's confirmation is the guard.
+-- vim.ui.select cannot bind extra keys, so there the picked item is followed by
+-- a menu offering <Enter>'s action (alt.default_label), alt.label and Cancel.
+function M.pick_many(items, prompt, on_choice, alt)
+  local function deliver(fn, selected)
+    if #selected > 0 then
+      -- Let the picker finish closing before anything else opens
+      vim.schedule(function() fn(selected) end)
+    end
+  end
+
   if is_module_available("telescope") then
     local pickers = require("telescope.pickers")
     local finders = require("telescope.finders")
@@ -117,8 +135,36 @@ function M.pick_many(items, prompt, on_choice)
     local actions = require("telescope.actions")
     local action_state = require("telescope.actions.state")
 
+    -- Marked items, else the highlighted one unless marked_only. Returns nil,
+    -- leaving the picker open, when marked_only finds nothing marked.
+    local function selection(prompt_bufnr, marked_only)
+      local picker = action_state.get_current_picker(prompt_bufnr)
+      local multi = picker:get_multi_selection()
+      local selected = {}
+      if multi and #multi > 0 then
+        for _, entry in ipairs(multi) do
+          table.insert(selected, entry.value)
+        end
+      elseif marked_only then
+        return nil
+      else
+        local entry = action_state.get_selected_entry()
+        if entry then
+          table.insert(selected, entry.value)
+        end
+      end
+      actions.close(prompt_bufnr)
+      return selected
+    end
+
+    local title = prompt .. " (<Tab> to select several)"
+    if alt then
+      title = string.format("%s · <CR> %s · %s %s", prompt, alt.default_label or "select",
+        alt.telescope_key, string.lower(alt.label))
+    end
+
     pickers.new({}, {
-      prompt_title = prompt .. " (<Tab> to select several)",
+      prompt_title = title,
       finder = finders.new_table({
         results = items,
         entry_maker = function(item)
@@ -126,27 +172,23 @@ function M.pick_many(items, prompt, on_choice)
         end,
       }),
       sorter = conf.generic_sorter({}),
-      attach_mappings = function(prompt_bufnr)
+      attach_mappings = function(prompt_bufnr, map)
         actions.select_default:replace(function()
-          local picker = action_state.get_current_picker(prompt_bufnr)
-          local multi = picker:get_multi_selection()
-          local selected = {}
-          if multi and #multi > 0 then
-            for _, entry in ipairs(multi) do
-              table.insert(selected, entry.value)
-            end
-          else
-            local entry = action_state.get_selected_entry()
-            if entry then
-              table.insert(selected, entry.value)
-            end
-          end
-          actions.close(prompt_bufnr)
-          if #selected > 0 then
-            -- Let Telescope finish closing before the confirmation prompt opens
-            vim.schedule(function() on_choice(selected) end)
-          end
+          deliver(on_choice, selection(prompt_bufnr))
         end)
+        if alt then
+          local function run_alt()
+            local selected = selection(prompt_bufnr, alt.require_marked)
+            if not selected then
+              vim.notify(string.format("Mark with <Tab> first, then %s to %s", alt.telescope_key,
+                string.lower(alt.label)), vim.log.levels.WARN)
+              return
+            end
+            deliver(alt.on_choice, selected)
+          end
+          map("i", alt.telescope_key, run_alt)
+          map("n", alt.telescope_key, run_alt)
+        end
         return true
       end,
     }):find()
@@ -160,19 +202,33 @@ function M.pick_many(items, prompt, on_choice)
       table.insert(source, line)
       by_line[line] = item
     end
+    local options = { "--multi", "--prompt", prompt .. "> " }
+    if alt then
+      -- --expect makes fzf report the key that accepted as the first line
+      vim.list_extend(options, {
+        "--expect", alt.fzf_key,
+        "--header", string.format("enter: %s · %s: %s", alt.default_label or "select",
+          alt.fzf_key, string.lower(alt.label)),
+      })
+    end
     vim.fn["fzf#run"](vim.fn["fzf#wrap"]({
       source = source,
-      options = { "--multi", "--prompt", prompt .. "> " },
+      options = options,
       ["sink*"] = function(lines)
+        local fn = on_choice
+        if alt then
+          local key = table.remove(lines, 1)
+          if key == alt.fzf_key then
+            fn = alt.on_choice
+          end
+        end
         local selected = {}
         for _, line in ipairs(lines) do
           if by_line[line] then
             table.insert(selected, by_line[line])
           end
         end
-        if #selected > 0 then
-          vim.schedule(function() on_choice(selected) end)
-        end
+        deliver(fn, selected)
       end,
     }))
     return
@@ -182,9 +238,22 @@ function M.pick_many(items, prompt, on_choice)
     prompt = prompt .. ":",
     format_item = function(item) return item.label end,
   }, function(choice)
-    if choice then
-      on_choice({ choice })
+    if not choice then
+      return
     end
+    if not alt then
+      on_choice({ choice })
+      return
+    end
+    local default_label = alt.default_label or "Select"
+    default_label = default_label:sub(1, 1):upper() .. default_label:sub(2)
+    vim.ui.select({ default_label, alt.label, "Cancel" }, { prompt = choice.label }, function(action)
+      if action == default_label then
+        on_choice({ choice })
+      elseif action == alt.label then
+        alt.on_choice({ choice })
+      end
+    end)
   end)
 end
 
@@ -192,8 +261,11 @@ end
 -- Entry point
 --------------------------------------------------------------------------------
 
-local function confirm(question, on_yes, cancelled_msg)
-  vim.ui.select({ "Yes", "No" }, { prompt = question }, function(choice)
+-- no_first puts "No" at the top, so a stray <Enter> cancels: used before
+-- anything is removed.
+local function confirm(question, on_yes, cancelled_msg, no_first)
+  local choices = no_first and { "No", "Yes" } or { "Yes", "No" }
+  vim.ui.select(choices, { prompt = question }, function(choice)
     if choice == "Yes" then
       on_yes()
     else
@@ -368,9 +440,14 @@ function M.unlink_commands(current, picked)
   return cmds
 end
 
--- Pick dependencies of the task `hash`, in either direction, and remove them.
--- Arguments as for M.pick.
-function M.unlink(hash, workspace_rc, on_complete)
+-- The dependency list of the task `hash`, in either direction. <Enter> opens
+-- the picked task; <C-x> (ctrl-x in fzf) removes the picked links after a
+-- confirmation that defaults to No. Removal is never on <Enter>, so a stray
+-- keypress cannot drop a link, and in Telescope it only takes links marked
+-- with <Tab>, never just the highlighted one.
+-- Arguments as for M.pick, plus on_open(task), called for <Enter> with the
+-- first picked task; it defaults to opening that task in the task View.
+function M.unlink(hash, workspace_rc, on_complete, on_open)
   local current
   current, workspace_rc = load_current(hash, workspace_rc)
   if not current then
@@ -397,7 +474,11 @@ function M.unlink(hash, workspace_rc, on_complete)
   end
 
   local desc = current.description or short(current.uuid)
-  M.pick_many(items, "Dependencies · <Enter> removes, <Esc> closes", function(selected)
+  on_open = on_open or function(task)
+    require("frontline.view").open_hash(short(task.uuid), workspace_rc)
+  end
+
+  local function remove(selected)
     echo_selection(string.format("These links of \"%s\" will be removed:\n", desc), selected)
 
     local question = string.format("Remove %s from \"%s\"?",
@@ -418,8 +499,19 @@ function M.unlink(hash, workspace_rc, on_complete)
           vim.log.levels.INFO)
       end
       finish(current, on_complete)
-    end, "Dependency removal cancelled")
-  end)
+    end, "Dependency removal cancelled", true)
+  end
+
+  M.pick_many(items, "Dependencies", function(selected)
+    on_open(selected[1].task)
+  end, {
+    telescope_key = "<C-x>",
+    fzf_key = "ctrl-x",
+    label = "Remove link",
+    default_label = "open",
+    on_choice = remove,
+    require_marked = true,
+  })
 end
 
 return M

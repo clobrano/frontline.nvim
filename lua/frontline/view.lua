@@ -521,7 +521,7 @@ local KEYMAP_HELP = {
   { "e", "edit the task in Taskwarrior's editor" },
   { "b", "pick open tasks that block this task" },
   { "B", "pick open tasks this task blocks" },
-  { "X", "pick dependencies to remove" },
+  { "X", "dependency list: <CR> open, <C-x> remove" },
   { "<CR>", "open the annotation's URL or file, or drill into a dependency" },
   { "y", "copy the annotation's URL or file path to the clipboard" },
   { "<BS>", "go back to the previous task" },
@@ -804,15 +804,36 @@ local function link_tasks(bufnr, fn_name)
     return
   end
 
-  require("frontline.link")[fn_name](st.hash, st.workspace_rc or false, function()
+  -- Back to the View once the picker has closed, if it is still open
+  local function refocus()
+    if not (vim.api.nvim_buf_is_valid(bufnr) and state[bufnr]) then
+      return false
+    end
+    if st.win and vim.api.nvim_win_is_valid(st.win) then
+      vim.api.nvim_set_current_win(st.win)
+    end
+    return true
+  end
+
+  local function on_complete()
     refresh_origin(st)
-    if vim.api.nvim_buf_is_valid(bufnr) and state[bufnr] then
-      if st.win and vim.api.nvim_win_is_valid(st.win) then
-        vim.api.nvim_set_current_win(st.win)
-      end
+    if refocus() then
       rerender(bufnr)
     end
-  end)
+  end
+
+  -- <Enter> in the dependency list drills into the task, as <CR> on a
+  -- dependency line does, instead of stacking a second View on top
+  local function on_open(task)
+    if refocus() then
+      table.insert(st.history, st.hash)
+      st.hash = task.uuid
+      rerender(bufnr)
+      vim.api.nvim_win_set_cursor(st.win, { 1, 0 })
+    end
+  end
+
+  require("frontline.link")[fn_name](st.hash, st.workspace_rc or false, on_complete, on_open)
 end
 
 -- Hand the task over to Taskwarrior's interactive editor, the same one the
@@ -877,7 +898,7 @@ local function setup_keymaps(bufnr)
   map("e", function() edit_task(bufnr) end, "Edit task in Taskwarrior's editor")
   map("b", function() link_tasks(bufnr, "pick_blocking_tasks") end, "Pick tasks blocking this task")
   map("B", function() link_tasks(bufnr, "pick_blocked_tasks") end, "Pick tasks blocked by this task")
-  map("X", function() link_tasks(bufnr, "unlink") end, "Pick dependencies to remove")
+  map("X", function() link_tasks(bufnr, "unlink") end, "Dependency list: open or remove")
   map("?", show_help, "Show task view keys")
 end
 

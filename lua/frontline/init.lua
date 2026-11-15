@@ -89,7 +89,7 @@ local config = {
     -- the standalone annotation list on a key of your choice.
     show_annotations = nil,
     edit_task = "<leader>te",
-    -- Dependency list in both directions; <Enter> removes the picked links
+    -- Dependency list in both directions; <CR> opens a task, <C-x> removes links
     show_blocking_dependencies = "<leader>tb",
     -- show_dependency_summary has no default binding: it is the read-only
     -- summary <leader>tb printed before it became a picker.
@@ -548,10 +548,10 @@ function M.setup(opts)
           vim.tbl_extend("force", opts_mapping, { desc = "Edit task in Taskwarrior editor" }))
       end
 
-      -- Dependency list (both directions), picking links to remove
+      -- Dependency list (both directions): <CR> opens, <C-x> removes
       if config.mappings.show_blocking_dependencies then
         vim.keymap.set("n", config.mappings.show_blocking_dependencies, function() require("frontline.link").unlink() end,
-          vim.tbl_extend("force", opts_mapping, { desc = "List task dependencies, pick to remove" }))
+          vim.tbl_extend("force", opts_mapping, { desc = "Dependency list: <CR> open, <C-x> remove" }))
       end
 
       -- Read-only dependency summary (no default binding)

@@ -4,6 +4,7 @@ describe("link dependencies", function()
   local original_system, original_notify, original_select, original_echo, original_pick, original_refresh
   local frontline = require("frontline")
   local current, others, blockers, blocked, commands, notifications, refreshed, offered, answer
+  local offered_choices
 
   before_each(function()
     current = { uuid = "cccccccc-0000", description = "Ship release", status = "pending", depends = { "aaaaaaaa-0000" } }
@@ -41,7 +42,10 @@ describe("link dependencies", function()
     end
     vim.notify = function(msg, level) table.insert(notifications, { msg = msg, level = level }) end
     vim.api.nvim_echo = function() end
-    vim.ui.select = function(_, _, cb) cb(answer) end
+    vim.ui.select = function(choices, _, cb)
+      offered_choices = choices
+      cb(answer)
+    end
     -- Pick the last two candidates offered
     link.pick_many = function(items, _, on_choice)
       offered = items
@@ -112,7 +116,16 @@ describe("link dependencies", function()
   end)
 
   describe("unlink", function()
+    local opened, key
+
     before_each(function()
+      opened, key = {}, "remove"
+      -- The list's picker: <Enter> runs on_choice, <C-x> runs alt.on_choice
+      link.pick_many = function(items, _, on_choice, alt)
+        offered = items
+        local selected = { items[#items - 1], items[#items] }
+        if key == "remove" then alt.on_choice(selected) else on_choice(selected) end
+      end
       -- aaaaaaaa is exported; zzzzzzzz is a stale link to a task that is gone
       current.depends = { "aaaaaaaa-0000", "zzzzzzzz-0000" }
       table.insert(blocked, { uuid = "gggggggg-0000", description = "Deleted", status = "deleted",
@@ -120,13 +133,26 @@ describe("link dependencies", function()
     end)
 
     it("lists the dependencies in both directions, tagged", function()
-      link.unlink("cccccccc", false)
+      link.unlink("cccccccc", false, nil, function() end)
       local labels = vim.tbl_map(function(i) return i.label end, offered)
       assert.are.same({
         "[blocks this] Already a blocker (aaaaaaaa)",
         "[blocks this] (task not found) (zzzzzzzz)",
         "[blocked by this] Blocked by current (bbbbbbbb)",
       }, labels)
+    end)
+
+    it("opens the task on <Enter> and removes nothing", function()
+      key = "enter"
+      link.unlink("cccccccc", false, nil, function(task) table.insert(opened, task.uuid) end)
+      assert.are.same({ "zzzzzzzz-0000" }, opened)
+      assert.are.same({}, modify_commands())
+    end)
+
+    it("asks for confirmation with No first", function()
+      answer = "No"
+      link.unlink("cccccccc", false)
+      assert.are.same({ "No", "Yes" }, offered_choices)
     end)
 
     it("removes the picked links, one command per direction", function()
@@ -140,7 +166,7 @@ describe("link dependencies", function()
     end)
 
     it("removes several blockers in a single command", function()
-      link.pick_many = function(items, _, on_choice) on_choice({ items[1], items[2] }) end
+      link.pick_many = function(items, _, _, alt) alt.on_choice({ items[1], items[2] }) end
       link.unlink("cccccccc", false)
       assert.are.same({
         "cccccccc-0000 modify depends:-aaaaaaaa-0000,-zzzzzzzz-0000",
