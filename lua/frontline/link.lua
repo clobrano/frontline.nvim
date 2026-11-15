@@ -76,18 +76,23 @@ function M.candidates(current, open_tasks)
   return result
 end
 
--- The Taskwarrior arguments that create the links, one command per picked task
--- so a failure on one does not hide whether the others went through.
-function M.link_commands(current, picked, mode)
-  local cmds = {}
+-- The single Taskwarrior command that creates all the links, so 'task undo'
+-- can take it back.
+--   blocked_by: only the current task changes, so this is always one undo step.
+--   blocks:     every picked task changes. Taskwarrior 3 undoes the whole
+--               command at once; Taskwarrior 2 records one undo step per task.
+-- rc.bulk=0 and rc.confirmation=off stop Taskwarrior from asking "Modify N
+-- tasks?" on a pipe it cannot read an answer from.
+function M.link_command(current, picked, mode)
+  local uuids = {}
   for _, task in ipairs(picked) do
-    if mode == "blocked_by" then
-      table.insert(cmds, string.format("%s modify depends:%s", current.uuid, task.uuid))
-    else
-      table.insert(cmds, string.format("%s modify depends:%s", task.uuid, current.uuid))
-    end
+    table.insert(uuids, task.uuid)
   end
-  return cmds
+  if mode == "blocked_by" then
+    return string.format("%s modify depends:%s", current.uuid, table.concat(uuids, ","))
+  end
+  return string.format("rc.bulk=0 rc.confirmation=off %s modify depends:%s",
+    table.concat(uuids, " "), current.uuid)
 end
 
 --------------------------------------------------------------------------------
@@ -250,23 +255,16 @@ function M.pick(mode, hash, workspace_rc, on_complete)
     vim.api.nvim_echo(chunks, false, {})
 
     confirm(spec.question(#picked, current.description or short(current.uuid)), function()
-      local failed = {}
-      for i, args in ipairs(M.link_commands(current, picked, mode)) do
-        local ok, output = task_client.run_command(args, workspace_rc)
-        if not ok then
-          table.insert(failed, string.format("%s: %s", short(picked[i].uuid), vim.trim(output or "")))
-        end
-      end
-
-      local linked = #picked - #failed
-      if #failed > 0 then
-        vim.notify(string.format("Linked %d of %d tasks. Failed:\n%s", linked, #picked,
-          table.concat(failed, "\n")), vim.log.levels.ERROR)
+      local ok, output = task_client.run_command(M.link_command(current, picked, mode), workspace_rc)
+      if not ok then
+        vim.notify("Failed to link tasks:\n" .. vim.trim(output or ""), vim.log.levels.ERROR)
       else
-        vim.notify(string.format("Linked %d task%s", linked, linked == 1 and "" or "s"), vim.log.levels.INFO)
+        vim.notify(string.format("Linked %d task%s", #picked, #picked == 1 and "" or "s"), vim.log.levels.INFO)
       end
 
-      if linked > 0 then
+      -- Refresh even on failure: Taskwarrior may have linked some tasks before
+      -- stopping, and the buffer should show what actually happened.
+      do
         if on_complete then
           on_complete()
         else

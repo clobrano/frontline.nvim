@@ -56,7 +56,7 @@ describe("link dependencies", function()
   local function modify_commands()
     local result = {}
     for _, cmd in ipairs(commands) do
-      local args = cmd:match("^task (%S+ modify depends:%S+)$")
+      local args = cmd:match("^task (.* modify depends:%S+)$")
       if args then table.insert(result, args) end
     end
     return result
@@ -68,21 +68,19 @@ describe("link dependencies", function()
     assert.are.same({ "Fix CI (eeeeeeee)", "Write docs [web] +doc (dddddddd)" }, labels)
   end)
 
-  it("makes the picked tasks block the current task", function()
+  it("makes the picked tasks block the current task in one command", function()
     link.pick_blocking_tasks("cccccccc", false)
     assert.are.same({
-      "cccccccc-0000 modify depends:eeeeeeee-0000",
-      "cccccccc-0000 modify depends:dddddddd-0000",
+      "cccccccc-0000 modify depends:eeeeeeee-0000,dddddddd-0000",
     }, modify_commands())
     assert.are.equal("Linked 2 tasks", notifications[#notifications].msg)
     assert.are.same({ "cccccccc" }, refreshed)
   end)
 
-  it("makes the current task block the picked tasks", function()
+  it("makes the current task block the picked tasks in one command", function()
     link.pick_blocked_tasks("cccccccc", false)
     assert.are.same({
-      "eeeeeeee-0000 modify depends:cccccccc-0000",
-      "dddddddd-0000 modify depends:cccccccc-0000",
+      "rc.bulk=0 rc.confirmation=off eeeeeeee-0000 dddddddd-0000 modify depends:cccccccc-0000",
     }, modify_commands())
   end)
 

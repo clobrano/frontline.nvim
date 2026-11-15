@@ -460,6 +460,14 @@ exist, without looking up their IDs:
 4. The selection is listed and you are asked to confirm. Answer *Yes* to link
    them; anything else changes nothing.
 
+All the selected tasks are linked with a single Taskwarrior command, so
+`task undo` (or `<leader>tu`) can take the change back:
+
+- `<leader>tl` changes only the current task, so one undo removes every link it made.
+- `<leader>tL` changes each selected task. Taskwarrior 3 undoes that command in
+  one step; Taskwarrior 2 records one undo step per task, so undo once for each
+  task you linked.
+
 The picker is Telescope when installed, then fzf.vim, then `vim.ui.select`.
 Multiple selection needs Telescope or fzf.vim; `vim.ui.select` picks one task at
 a time. The same pickers are on `b` and `B` inside the [Task View](#task-view).
