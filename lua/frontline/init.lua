@@ -94,7 +94,9 @@ local config = {
     -- show_dependency_summary has no default binding: it is the read-only
     -- summary <leader>tb printed before it became a picker.
     show_dependency_summary = nil,
-    show_blocked_tasks = "<leader>tr",
+    -- show_blocked_tasks has no default binding: <leader>tb lists the tasks
+    -- this one blocks along with its blockers. Set it to keep the printed list.
+    show_blocked_tasks = nil,
     add_dependency = "<leader>tB",
     link_blocking_tasks = "<leader>tl", -- pick open tasks that block this one
     link_blocked_tasks = "<leader>tL",  -- pick open tasks this one blocks

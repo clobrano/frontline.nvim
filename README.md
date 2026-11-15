@@ -439,7 +439,6 @@ Place your cursor on any task line and use these default keybindings:
 | `<leader>tB` | Add Dependency | Create new task as dependency of current task |
 | `<leader>tu` | Undo Task | Undo last action on task |
 | `<leader>tb` | Dependencies | List the task's dependencies both ways; pick to remove (see [Linking Dependencies](#linking-dependencies)) |
-| `<leader>tr` | Show Blocked Tasks | Show tasks blocked by this task |
 | `<leader>tl` | Pick Blocking Tasks | Pick existing open tasks that block this task (see [Linking Dependencies](#linking-dependencies)) |
 | `<leader>tL` | Pick Blocked Tasks | Pick existing open tasks that this task blocks |
 | `<leader>tc` | Copy Task | Copy the task to the clipboard (see [Copy Task Format](#copy-task-format)) |
@@ -736,12 +735,17 @@ require('frontline').setup({
 `<leader>tb` used to print a read-only summary of the task's dependencies. It
 now opens the same list in a picker: `<Esc>` closes it, `<Enter>` removes the
 selected links after a confirmation. The printed summary is still available as
-`mappings.show_dependency_summary`, with no default binding:
+`mappings.show_dependency_summary`, with no default binding.
+
+`<leader>tr`, which printed the tasks blocked by this one, is no longer bound:
+`<leader>tb` lists them along with the task's blockers. The printed list is
+still available as `mappings.show_blocked_tasks`.
 
 ```lua
 require('frontline').setup({
   mappings = {
     show_dependency_summary = "<leader>tD",  -- keep the old printed summary
+    show_blocked_tasks = "<leader>tr",       -- keep the old blocked-tasks list
   },
 })
 ```
@@ -786,6 +790,7 @@ require('frontline').setup({
 | `mappings.edit_task` | string | `"<leader>te"` | Keybinding to edit task in Taskwarrior editor |
 | `mappings.show_blocking_dependencies` | string | `"<leader>tb"` | Keybinding to list dependencies (forward and reverse) in a picker that removes the selected ones |
 | `mappings.show_dependency_summary` | string | `nil` | Keybinding for the read-only dependency summary `<leader>tb` used to print (no default) |
+| `mappings.show_blocked_tasks` | string | `nil` | Keybinding to print the tasks blocked by this task (no default; `<leader>tb` covers it) |
 | `mappings.add_dependency` | string | `"<leader>tB"` | Keybinding to add task as dependency |
 | `mappings.link_blocking_tasks` | string | `"<leader>tl"` | Keybinding to pick existing open tasks that block the current task |
 | `mappings.link_blocked_tasks` | string | `"<leader>tL"` | Keybinding to pick existing open tasks the current task blocks |
