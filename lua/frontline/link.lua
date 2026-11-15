@@ -1,8 +1,8 @@
 -- Link existing tasks as dependencies of the current task, or the other way
 -- round, by picking them from a fuzzy list of open tasks instead of typing
--- their IDs into a 'modify depends:' command. M.unlink is the dependency list:
--- it shows the task's dependencies in both directions, and removes the ones
--- picked with <Enter>; <Esc> just closes it.
+-- their IDs into a 'modify depends:' command. Links are removed from the task
+-- View with 'x' on a dependency line, which builds its commands with
+-- M.unlink_commands.
 --
 --   blocked_by: the picked tasks block the current task
 --               (current depends on each picked task)
@@ -97,6 +97,27 @@ function M.link_command(current, picked, mode)
     table.concat(uuids, " "), current.uuid)
 end
 
+-- The Taskwarrior commands that remove links from the task `current_uuid`:
+--   blocker_uuids: tasks that block it (dropped from its own depends)
+--   blocked_uuids: tasks it blocks (it is dropped from each one's depends)
+-- At most two commands, one per direction, so each is a single undo step on
+-- Taskwarrior 3 (the blocked one is one step per task on Taskwarrior 2).
+function M.unlink_commands(current_uuid, blocker_uuids, blocked_uuids)
+  local cmds = {}
+  if blocker_uuids and #blocker_uuids > 0 then
+    local removals = {}
+    for _, uuid in ipairs(blocker_uuids) do
+      table.insert(removals, "-" .. uuid)
+    end
+    table.insert(cmds, string.format("%s modify depends:%s", current_uuid, table.concat(removals, ",")))
+  end
+  if blocked_uuids and #blocked_uuids > 0 then
+    table.insert(cmds, string.format("rc.bulk=0 rc.confirmation=off %s modify depends:-%s",
+      table.concat(blocked_uuids, " "), current_uuid))
+  end
+  return cmds
+end
+
 --------------------------------------------------------------------------------
 -- Picker
 --------------------------------------------------------------------------------
@@ -107,24 +128,13 @@ local function is_module_available(name)
 end
 
 -- Let the user pick one or more items. on_choice gets the list of picked items
--- when they press <Enter>; nothing is called when the picker is dismissed.
--- Telescope and fzf.vim allow several items with <Tab>; vim.ui.select picks one.
---
--- alt, optional, adds a second action on its own key, for things that should
--- not happen on a stray <Enter>:
---   { telescope_key = "<C-x>", fzf_key = "ctrl-x", label = "Remove link",
---     on_choice = function(selected) ... end, require_marked = true }
--- With require_marked, Telescope runs alt only on items marked with <Tab>:
--- pressed with nothing marked it does nothing but say so, and stays open.
--- fzf cannot tell marked lines from the highlighted one, so there (and with
--- vim.ui.select) the caller's confirmation is the guard.
--- vim.ui.select cannot bind extra keys, so there the picked item is followed by
--- a menu offering <Enter>'s action (alt.default_label), alt.label and Cancel.
-function M.pick_many(items, prompt, on_choice, alt)
-  local function deliver(fn, selected)
+-- (never called when the picker is dismissed). Telescope and fzf.vim allow
+-- several items with <Tab>; vim.ui.select picks one.
+function M.pick_many(items, prompt, on_choice)
+  local function deliver(selected)
     if #selected > 0 then
-      -- Let the picker finish closing before anything else opens
-      vim.schedule(function() fn(selected) end)
+      -- Let the picker finish closing before the confirmation prompt opens
+      vim.schedule(function() on_choice(selected) end)
     end
   end
 
@@ -135,36 +145,8 @@ function M.pick_many(items, prompt, on_choice, alt)
     local actions = require("telescope.actions")
     local action_state = require("telescope.actions.state")
 
-    -- Marked items, else the highlighted one unless marked_only. Returns nil,
-    -- leaving the picker open, when marked_only finds nothing marked.
-    local function selection(prompt_bufnr, marked_only)
-      local picker = action_state.get_current_picker(prompt_bufnr)
-      local multi = picker:get_multi_selection()
-      local selected = {}
-      if multi and #multi > 0 then
-        for _, entry in ipairs(multi) do
-          table.insert(selected, entry.value)
-        end
-      elseif marked_only then
-        return nil
-      else
-        local entry = action_state.get_selected_entry()
-        if entry then
-          table.insert(selected, entry.value)
-        end
-      end
-      actions.close(prompt_bufnr)
-      return selected
-    end
-
-    local title = prompt .. " (<Tab> to select several)"
-    if alt then
-      title = string.format("%s · <CR> %s · %s %s", prompt, alt.default_label or "select",
-        alt.telescope_key, string.lower(alt.label))
-    end
-
     pickers.new({}, {
-      prompt_title = title,
+      prompt_title = prompt .. " (<Tab> to select several)",
       finder = finders.new_table({
         results = items,
         entry_maker = function(item)
@@ -172,23 +154,24 @@ function M.pick_many(items, prompt, on_choice, alt)
         end,
       }),
       sorter = conf.generic_sorter({}),
-      attach_mappings = function(prompt_bufnr, map)
+      attach_mappings = function(prompt_bufnr)
         actions.select_default:replace(function()
-          deliver(on_choice, selection(prompt_bufnr))
-        end)
-        if alt then
-          local function run_alt()
-            local selected = selection(prompt_bufnr, alt.require_marked)
-            if not selected then
-              vim.notify(string.format("Mark with <Tab> first, then %s to %s", alt.telescope_key,
-                string.lower(alt.label)), vim.log.levels.WARN)
-              return
+          local picker = action_state.get_current_picker(prompt_bufnr)
+          local multi = picker:get_multi_selection()
+          local selected = {}
+          if multi and #multi > 0 then
+            for _, entry in ipairs(multi) do
+              table.insert(selected, entry.value)
             end
-            deliver(alt.on_choice, selected)
+          else
+            local entry = action_state.get_selected_entry()
+            if entry then
+              table.insert(selected, entry.value)
+            end
           end
-          map("i", alt.telescope_key, run_alt)
-          map("n", alt.telescope_key, run_alt)
-        end
+          actions.close(prompt_bufnr)
+          deliver(selected)
+        end)
         return true
       end,
     }):find()
@@ -202,33 +185,17 @@ function M.pick_many(items, prompt, on_choice, alt)
       table.insert(source, line)
       by_line[line] = item
     end
-    local options = { "--multi", "--prompt", prompt .. "> " }
-    if alt then
-      -- --expect makes fzf report the key that accepted as the first line
-      vim.list_extend(options, {
-        "--expect", alt.fzf_key,
-        "--header", string.format("enter: %s · %s: %s", alt.default_label or "select",
-          alt.fzf_key, string.lower(alt.label)),
-      })
-    end
     vim.fn["fzf#run"](vim.fn["fzf#wrap"]({
       source = source,
-      options = options,
+      options = { "--multi", "--prompt", prompt .. "> " },
       ["sink*"] = function(lines)
-        local fn = on_choice
-        if alt then
-          local key = table.remove(lines, 1)
-          if key == alt.fzf_key then
-            fn = alt.on_choice
-          end
-        end
         local selected = {}
         for _, line in ipairs(lines) do
           if by_line[line] then
             table.insert(selected, by_line[line])
           end
         end
-        deliver(fn, selected)
+        deliver(selected)
       end,
     }))
     return
@@ -238,22 +205,9 @@ function M.pick_many(items, prompt, on_choice, alt)
     prompt = prompt .. ":",
     format_item = function(item) return item.label end,
   }, function(choice)
-    if not choice then
-      return
-    end
-    if not alt then
+    if choice then
       on_choice({ choice })
-      return
     end
-    local default_label = alt.default_label or "Select"
-    default_label = default_label:sub(1, 1):upper() .. default_label:sub(2)
-    vim.ui.select({ default_label, alt.label, "Cancel" }, { prompt = choice.label }, function(action)
-      if action == default_label then
-        on_choice({ choice })
-      elseif action == alt.label then
-        alt.on_choice({ choice })
-      end
-    end)
   end)
 end
 
@@ -261,54 +215,14 @@ end
 -- Entry point
 --------------------------------------------------------------------------------
 
--- no_first puts "No" at the top, so a stray <Enter> cancels: used before
--- anything is removed.
-local function confirm(question, on_yes, cancelled_msg, no_first)
-  local choices = no_first and { "No", "Yes" } or { "Yes", "No" }
-  vim.ui.select(choices, { prompt = question }, function(choice)
+local function confirm(question, on_yes)
+  vim.ui.select({ "Yes", "No" }, { prompt = question }, function(choice)
     if choice == "Yes" then
       on_yes()
     else
-      vim.notify(cancelled_msg or "Dependency linking cancelled", vim.log.levels.INFO)
+      vim.notify("Dependency linking cancelled", vim.log.levels.INFO)
     end
   end)
-end
-
--- Resolve the task and workspace the pickers work on. Returns current, rc, or
--- nil after telling the user what went wrong.
-local function load_current(hash, workspace_rc)
-  hash = hash or require("frontline.mappings").get_task_hash_under_cursor()
-  if not hash then
-    return nil
-  end
-  if workspace_rc == nil then
-    workspace_rc = require("frontline").get_current_workspace_rc()
-  end
-
-  local found, err = task_client.execute_query(hash, workspace_rc)
-  if not found or #found == 0 then
-    vim.notify("Failed to get task information" .. (err and (": " .. err) or ""), vim.log.levels.ERROR)
-    return nil
-  end
-  return found[1], workspace_rc
-end
-
--- After a change: refresh even on failure, since Taskwarrior may have changed
--- some tasks before stopping and the buffer should show what actually happened.
-local function finish(current, on_complete)
-  if on_complete then
-    on_complete()
-  else
-    require("frontline").refresh_current_buffer(short(current.uuid))
-  end
-end
-
-local function echo_selection(header, selected)
-  local chunks = { { header, "Title" } }
-  for _, item in ipairs(selected) do
-    table.insert(chunks, { "  " .. item.label .. "\n", "Normal" })
-  end
-  vim.api.nvim_echo(chunks, false, {})
 end
 
 -- Pick open tasks and link them to the task `hash`.
@@ -323,11 +237,20 @@ function M.pick(mode, hash, workspace_rc, on_complete)
     return
   end
 
-  local current
-  current, workspace_rc = load_current(hash, workspace_rc)
-  if not current then
+  hash = hash or require("frontline.mappings").get_task_hash_under_cursor()
+  if not hash then
     return
   end
+  if workspace_rc == nil then
+    workspace_rc = require("frontline").get_current_workspace_rc()
+  end
+
+  local found, err = task_client.execute_query(hash, workspace_rc)
+  if not found or #found == 0 then
+    vim.notify("Failed to get task information" .. (err and (": " .. err) or ""), vim.log.levels.ERROR)
+    return
+  end
+  local current = found[1]
 
   local open_tasks, open_err = task_client.execute_query("status:pending", workspace_rc)
   if not open_tasks then
@@ -346,14 +269,17 @@ function M.pick(mode, hash, workspace_rc, on_complete)
     table.insert(items, { task = task, label = M.format_candidate(task) })
   end
 
+  local desc = current.description or short(current.uuid)
   M.pick_many(items, spec.prompt, function(selected)
     local picked = {}
+    local chunks = { { spec.header(desc), "Title" } }
     for _, item in ipairs(selected) do
       table.insert(picked, item.task)
+      table.insert(chunks, { "  " .. item.label .. "\n", "Normal" })
     end
-    echo_selection(spec.header(current.description or short(current.uuid)), selected)
+    vim.api.nvim_echo(chunks, false, {})
 
-    confirm(spec.question(#picked, current.description or short(current.uuid)), function()
+    confirm(spec.question(#picked, desc), function()
       local ok, output = task_client.run_command(M.link_command(current, picked, mode), workspace_rc)
       if not ok then
         vim.notify("Failed to link tasks:\n" .. vim.trim(output or ""), vim.log.levels.ERROR)
@@ -361,7 +287,13 @@ function M.pick(mode, hash, workspace_rc, on_complete)
         vim.notify(string.format("Linked %d task%s", #picked, #picked == 1 and "" or "s"), vim.log.levels.INFO)
       end
 
-      finish(current, on_complete)
+      -- Refresh even on failure: Taskwarrior may have linked some tasks before
+      -- stopping, and the buffer should show what actually happened.
+      if on_complete then
+        on_complete()
+      else
+        require("frontline").refresh_current_buffer(short(current.uuid))
+      end
     end)
   end)
 end
@@ -372,146 +304,6 @@ end
 
 function M.pick_blocked_tasks(hash, workspace_rc, on_complete)
   M.pick("blocks", hash, workspace_rc, on_complete)
-end
-
---------------------------------------------------------------------------------
--- Removing dependencies
---------------------------------------------------------------------------------
-
-local UNLINK_TAGS = {
-  blocker = "[blocks this]",
-  blocked = "[blocked by this]",
-}
-
--- Every task linked to `current`, both ways, as picker items:
---   kind "blocker": a task in current.depends (it blocks current)
---   kind "blocked": a task whose depends holds current (current blocks it)
--- blocker_tasks are the exported tasks for current.depends; a UUID with no
--- exported task (purged, or in another database) is still listed so the stale
--- link can be removed. Deleted tasks that depend on current are left out.
-function M.unlink_candidates(current, blocker_tasks, blocked_tasks)
-  local by_uuid = {}
-  for _, task in ipairs(blocker_tasks or {}) do
-    by_uuid[task.uuid] = task
-  end
-
-  local function label(kind, task)
-    local text = UNLINK_TAGS[kind] .. " " .. M.format_candidate(task)
-    if task.status == "completed" then
-      text = text .. " (completed)"
-    end
-    return text
-  end
-
-  local items = {}
-  for _, uuid in ipairs(current.depends or {}) do
-    local task = by_uuid[uuid] or { uuid = uuid, description = "(task not found)" }
-    table.insert(items, { kind = "blocker", task = task, label = label("blocker", task) })
-  end
-  for _, task in ipairs(blocked_tasks or {}) do
-    if task.uuid ~= current.uuid and task.status ~= "deleted" then
-      table.insert(items, { kind = "blocked", task = task, label = label("blocked", task) })
-    end
-  end
-  return items
-end
-
--- At most two Taskwarrior commands remove the picked links: one on the
--- current task for its blockers (a single undo step), one on all the picked
--- tasks it blocks (a single undo step on Taskwarrior 3, one per task on 2).
-function M.unlink_commands(current, picked)
-  local blockers, blocked = {}, {}
-  for _, item in ipairs(picked) do
-    if item.kind == "blocker" then
-      table.insert(blockers, "-" .. item.task.uuid)
-    else
-      table.insert(blocked, item.task.uuid)
-    end
-  end
-
-  local cmds = {}
-  if #blockers > 0 then
-    table.insert(cmds, string.format("%s modify depends:%s", current.uuid, table.concat(blockers, ",")))
-  end
-  if #blocked > 0 then
-    table.insert(cmds, string.format("rc.bulk=0 rc.confirmation=off %s modify depends:-%s",
-      table.concat(blocked, " "), current.uuid))
-  end
-  return cmds
-end
-
--- The dependency list of the task `hash`, in either direction. <Enter> opens
--- the picked task; <C-x> (ctrl-x in fzf) removes the picked links after a
--- confirmation that defaults to No. Removal is never on <Enter>, so a stray
--- keypress cannot drop a link, and in Telescope it only takes links marked
--- with <Tab>, never just the highlighted one.
--- Arguments as for M.pick, plus on_open(task), called for <Enter> with the
--- first picked task; it defaults to opening that task in the task View.
-function M.unlink(hash, workspace_rc, on_complete, on_open)
-  local current
-  current, workspace_rc = load_current(hash, workspace_rc)
-  if not current then
-    return
-  end
-
-  -- UUIDs separated by spaces: Taskwarrior only builds comma sets from numeric
-  -- IDs. A failed lookup only costs the descriptions; the links are still listed.
-  local blocker_tasks = {}
-  if current.depends and #current.depends > 0 then
-    blocker_tasks = task_client.execute_query(table.concat(current.depends, " "), workspace_rc) or {}
-  end
-
-  local blocked_tasks, rev_err = task_client.get_reverse_dependencies(current.uuid, workspace_rc)
-  if not blocked_tasks then
-    vim.notify("Failed to get blocked tasks: " .. rev_err, vim.log.levels.ERROR)
-    return
-  end
-
-  local items = M.unlink_candidates(current, blocker_tasks, blocked_tasks)
-  if #items == 0 then
-    vim.notify("Task has no dependencies", vim.log.levels.INFO)
-    return
-  end
-
-  local desc = current.description or short(current.uuid)
-  on_open = on_open or function(task)
-    require("frontline.view").open_hash(short(task.uuid), workspace_rc)
-  end
-
-  local function remove(selected)
-    echo_selection(string.format("These links of \"%s\" will be removed:\n", desc), selected)
-
-    local question = string.format("Remove %s from \"%s\"?",
-      #selected == 1 and "this dependency" or (#selected .. " dependencies"), desc)
-    confirm(question, function()
-      local errors = {}
-      for _, args in ipairs(M.unlink_commands(current, selected)) do
-        local ok, output = task_client.run_command(args, workspace_rc)
-        if not ok then
-          table.insert(errors, vim.trim(output or ""))
-        end
-      end
-
-      if #errors > 0 then
-        vim.notify("Failed to remove dependencies:\n" .. table.concat(errors, "\n"), vim.log.levels.ERROR)
-      else
-        vim.notify(string.format("Removed %d dependenc%s", #selected, #selected == 1 and "y" or "ies"),
-          vim.log.levels.INFO)
-      end
-      finish(current, on_complete)
-    end, "Dependency removal cancelled", true)
-  end
-
-  M.pick_many(items, "Dependencies", function(selected)
-    on_open(selected[1].task)
-  end, {
-    telescope_key = "<C-x>",
-    fzf_key = "ctrl-x",
-    label = "Remove link",
-    default_label = "open",
-    on_choice = remove,
-    require_marked = true,
-  })
 end
 
 return M

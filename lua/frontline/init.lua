@@ -89,14 +89,8 @@ local config = {
     -- the standalone annotation list on a key of your choice.
     show_annotations = nil,
     edit_task = "<leader>te",
-    -- Dependency list in both directions; <CR> opens a task, <C-x> removes links
     show_blocking_dependencies = "<leader>tb",
-    -- show_dependency_summary has no default binding: it is the read-only
-    -- summary <leader>tb printed before it became a picker.
-    show_dependency_summary = nil,
-    -- show_blocked_tasks has no default binding: <leader>tb lists the tasks
-    -- this one blocks along with its blockers. Set it to keep the printed list.
-    show_blocked_tasks = nil,
+    show_blocked_tasks = "<leader>tr",
     add_dependency = "<leader>tB",
     link_blocking_tasks = "<leader>tl", -- pick open tasks that block this one
     link_blocked_tasks = "<leader>tL",  -- pick open tasks this one blocks
@@ -548,16 +542,10 @@ function M.setup(opts)
           vim.tbl_extend("force", opts_mapping, { desc = "Edit task in Taskwarrior editor" }))
       end
 
-      -- Dependency list (both directions): <CR> opens, <C-x> removes
+      -- Show blocking dependencies
       if config.mappings.show_blocking_dependencies then
-        vim.keymap.set("n", config.mappings.show_blocking_dependencies, function() require("frontline.link").unlink() end,
-          vim.tbl_extend("force", opts_mapping, { desc = "Dependency list: <CR> open, <C-x> remove" }))
-      end
-
-      -- Read-only dependency summary (no default binding)
-      if config.mappings.show_dependency_summary then
-        vim.keymap.set("n", config.mappings.show_dependency_summary, mappings.show_blocking_dependencies,
-          vim.tbl_extend("force", opts_mapping, { desc = "Show task dependency summary" }))
+        vim.keymap.set("n", config.mappings.show_blocking_dependencies, mappings.show_blocking_dependencies,
+          vim.tbl_extend("force", opts_mapping, { desc = "Show task blocking dependencies" }))
       end
 
       -- Show tasks blocked by this task (reverse dependencies, always available)

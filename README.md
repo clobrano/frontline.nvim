@@ -10,7 +10,7 @@ A Neovim plugin for integrating Taskwarrior task management directly into Markdo
 - 🎯 Priority, dependency, and reverse dependency markers
 - ⚙️ Configurable blank lines after task lists
 - ⌨️ Interactive task management with keybindings
-- 🔗 Link existing tasks as blockers (or blocked tasks) from a fuzzy picker, no IDs needed, and unlink them the same way
+- 🔗 Link existing tasks as blockers (or blocked tasks) from a fuzzy picker, no IDs needed, and unlink them from the task View
 - 🔎 Compact task View with annotations, dependencies and inline TODO toggling
 - 🕐 Local timezone display for dates and times
 - 🗂️ Multiple Taskwarrior workspaces support with `@workspace` syntax
@@ -438,7 +438,8 @@ Place your cursor on any task line and use these default keybindings:
 | `<leader>tn` | Create Task | Create new task with smart context-aware pre-fill |
 | `<leader>tB` | Add Dependency | Create new task as dependency of current task |
 | `<leader>tu` | Undo Task | Undo last action on task |
-| `<leader>tb` | Dependencies | List the task's dependencies both ways: `<CR>` opens one, `<C-x>` removes links (see [Linking Dependencies](#linking-dependencies)) |
+| `<leader>tb` | Show Dependencies | Show task dependencies and reverse dependencies |
+| `<leader>tr` | Show Blocked Tasks | Show tasks blocked by this task |
 | `<leader>tl` | Pick Blocking Tasks | Pick existing open tasks that block this task (see [Linking Dependencies](#linking-dependencies)) |
 | `<leader>tL` | Pick Blocked Tasks | Pick existing open tasks that this task blocks |
 | `<leader>tc` | Copy Task | Copy the task to the clipboard (see [Copy Task Format](#copy-task-format)) |
@@ -467,38 +468,20 @@ All the selected tasks are linked with a single Taskwarrior command, so
   one step; Taskwarrior 2 records one undo step per task, so undo once for each
   task you linked.
 
-`<leader>tb` lists every dependency of the task, both ways, tagged with its
-direction:
+To remove links, open the [Task View](#task-view) (`<leader>tv`): its
+**Blocked by** and **Blocking** sections list the task's dependencies. Put the
+cursor on one and press `x`, or select several lines with `V` and press `x` to
+remove every link in the selection. The confirmation names each link
+(`"Write docs" blocks "Ship release"`) and starts on **No**, so a stray `<Enter>`
+keeps the links. Only the links are removed; the tasks themselves are not touched.
 
-```
-[blocks this] Write docs [web] +doc (dddddddd)
-[blocks this] Fix CI (eeeeeeee) (completed)
-[blocked by this] Publish release notes (ffffffff)
-```
-
-| Key | Telescope | fzf.vim | Action |
-|-----|-----------|---------|--------|
-| Open | `<CR>` | `enter` | Open the task in the task View |
-| Remove | `<C-x>` | `ctrl-x` | Remove the links marked with `<Tab>` |
-| Close | `<Esc>` | `esc` | Close the list |
-
-Removal is deliberately not on `<Enter>`, so a stray keypress cannot drop a
-link. In Telescope it only acts on links you marked with `<Tab>`: pressed with
-nothing marked, `<C-x>` does nothing but remind you. (fzf cannot tell a marked
-line from the highlighted one, so there `ctrl-x` takes the highlighted line
-when nothing is marked.) The confirmation then lists the links and starts on
-**No**: you have to move to *Yes* to go through with it. With `vim.ui.select`, which cannot bind
-extra keys, picking a dependency asks whether to open it or remove the link.
-
-Only the links are removed; the tasks themselves are not touched. Links to tasks this task
-blocks are removed in one command, links to its blockers in another, so a
-selection holding both directions takes two `task undo` steps (with the same
-Taskwarrior 2 caveat as above for the tasks this one blocks).
+Removed blockers go in one command and removals from the tasks this one blocks
+in another, so a selection spanning both sections takes two `task undo` steps
+(with the same Taskwarrior 2 caveat as above for the tasks this one blocks).
 
 The picker is Telescope when installed, then fzf.vim, then `vim.ui.select`.
 Multiple selection needs Telescope or fzf.vim; `vim.ui.select` picks one task at
-a time. The same pickers are on `b`, `B` and `X` inside the [Task View](#task-view)
-(`X` being the dependency list, since the View already shows it read-only).
+a time. The same pickers are on `b` and `B` inside the Task View.
 
 ### Task View
 
@@ -584,13 +567,13 @@ Inside the View:
 |-----|--------|
 | `q`, `<Esc>` | Close the View |
 | `a` | Add an annotation |
-| `x` | Toggle the annotation under the cursor between `TODO:`/`DONE:` (or `[ ]`/`[x]`) |
+| `x` | On an annotation: toggle it between `TODO:`/`DONE:` (or `[ ]`/`[x]`). On a dependency: remove that link, after a confirmation (see [Linking Dependencies](#linking-dependencies)) |
+| `V`…`x` | Remove every dependency link in the selected lines, after one confirmation |
 | `d` | Toggle done |
 | `s` | Toggle started |
 | `e` | Edit the task in Taskwarrior's interactive editor, the same one `<leader>te` opens |
 | `b` | Pick open tasks that block this task (see [Linking Dependencies](#linking-dependencies)) |
 | `B` | Pick open tasks this task blocks |
-| `X` | Dependency list: `<CR>` drills into a task, `<C-x>` removes links |
 | `<CR>` | On an annotation: open its URL or file path. On a dependency: open that task's View |
 | `y` | On an annotation: copy its URL or file path to the clipboard (`+`) and unnamed register, prompting when there is more than one |
 | `<BS>` | Go back to the previous task after drilling into a dependency |
@@ -713,7 +696,7 @@ require('frontline').setup({
     add_annotation = "<leader>ta",   -- Add task annotation
     modify_task = "<leader>tm",      -- Modify task properties
     edit_task = "<leader>te",        -- Edit task in Taskwarrior editor
-    show_blocking_dependencies = "<leader>tb",  -- Dependency list: open or remove
+    show_blocking_dependencies = "<leader>tb",  -- Show dependencies
     add_dependency = "<leader>tB",   -- Add task as dependency
     link_blocking_tasks = "<leader>tl", -- Pick existing tasks that block this one
     link_blocked_tasks = "<leader>tL",  -- Pick existing tasks this one blocks
@@ -741,24 +724,6 @@ your binding wins over `add_annotation` and the plugin warns once at startup.
 require('frontline').setup({
   mappings = {
     show_annotations = "<leader>tA",  -- keep the old list on a different key
-  },
-})
-```
-
-`<leader>tb` used to print a read-only summary of the task's dependencies. It
-now opens the same list in a picker: `<CR>` opens a task, `<C-x>` removes the
-selected links after a confirmation, `<Esc>` closes it. The printed summary is still available as
-`mappings.show_dependency_summary`, with no default binding.
-
-`<leader>tr`, which printed the tasks blocked by this one, is no longer bound:
-`<leader>tb` lists them along with the task's blockers. The printed list is
-still available as `mappings.show_blocked_tasks`.
-
-```lua
-require('frontline').setup({
-  mappings = {
-    show_dependency_summary = "<leader>tD",  -- keep the old printed summary
-    show_blocked_tasks = "<leader>tr",       -- keep the old blocked-tasks list
   },
 })
 ```
@@ -801,9 +766,7 @@ require('frontline').setup({
 | `mappings.show_annotations` | string | `nil` | Keybinding to list annotations only (no default; the View covers this) |
 | `mappings.add_todo_annotation` | string | `"<leader>tt"` | Keybinding to add an annotation pre-filled with `TODO: ` |
 | `mappings.edit_task` | string | `"<leader>te"` | Keybinding to edit task in Taskwarrior editor |
-| `mappings.show_blocking_dependencies` | string | `"<leader>tb"` | Keybinding to list dependencies (forward and reverse) in a picker (`<CR>` opens a task, `<C-x>` removes links) |
-| `mappings.show_dependency_summary` | string | `nil` | Keybinding for the read-only dependency summary `<leader>tb` used to print (no default) |
-| `mappings.show_blocked_tasks` | string | `nil` | Keybinding to print the tasks blocked by this task (no default; `<leader>tb` covers it) |
+| `mappings.show_blocking_dependencies` | string | `"<leader>tb"` | Keybinding to show dependencies (forward and reverse) |
 | `mappings.add_dependency` | string | `"<leader>tB"` | Keybinding to add task as dependency |
 | `mappings.link_blocking_tasks` | string | `"<leader>tl"` | Keybinding to pick existing open tasks that block the current task |
 | `mappings.link_blocked_tasks` | string | `"<leader>tL"` | Keybinding to pick existing open tasks the current task blocks |
